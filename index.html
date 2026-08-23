@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>InvUpload</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&family=Syne:wght@700;800&display=swap');
+
+        :root {
+            /* Tokens mirrored from CigAudit (audit.gassnap.io) */
+            --bg: #0f0f0f;
+            --surface: #1a1a1a;
+            --surface2: #242424;
+            --border: #2e2e2e;
+            --accent: #f5c842;
+            --accent-soft: rgba(245, 200, 66, 0.12);
+            --red: #ff4444;
+            --green: #3ddc84;
+            --text: #f0f0f0;
+            --muted: #888;
+            --mono: 'DM Mono', monospace;
+            --sans: 'DM Sans', sans-serif;
+            --display: 'Syne', sans-serif;
+        }
+
+        * {
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: var(--sans);
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overscroll-behavior: none;
+        }
+
+        .heading-font {
+            font-family: var(--display);
+            font-weight: 800;
+        }
+
+        /* Exact CigAudit wordmark treatment:
+           .logo { Syne 18/800 accent } .logo span { text } */
+        .logo {
+            font-family: var(--display);
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--accent);
+            line-height: 1;
+            letter-spacing: 0;
+        }
+
+        .logo span {
+            color: var(--text);
+        }
+
+        .mono {
+            font-family: var(--mono);
+        }
+
+        .form-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .section-label {
+            font-family: var(--mono);
+            font-size: 0.6875rem;
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .field-input {
+            width: 100%;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-family: var(--sans);
+            font-size: 0.9375rem;
+            font-weight: 500;
+            border-radius: 0.75rem;
+            padding: 0.875rem 1rem 0.875rem 2.5rem;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .field-input::placeholder {
+            color: #666;
+        }
+
+        .field-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-soft);
+        }
+
+        /* Native date picker: keep text readable on dark */
+        input[type="date"].field-input {
+            color-scheme: dark;
+        }
+
+        .field-icon {
+            color: var(--muted);
+            transition: color 0.2s ease;
+        }
+
+        .field-wrap:focus-within .field-icon {
+            color: var(--accent);
+        }
+
+        .upload-area {
+            background: var(--surface2);
+            border: 1.5px dashed var(--border);
+            transition: all 0.2s ease;
+        }
+
+        .upload-area:hover,
+        .upload-area:active {
+            border-color: var(--accent);
+            background: rgba(245, 200, 66, 0.04);
+        }
+
+        .upload-area.dragover {
+            background: var(--accent-soft);
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-soft);
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #000;
+            font-family: var(--display);
+            font-weight: 800;
+            letter-spacing: 0.01em;
+            transition: opacity 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+            box-shadow: 0 0 24px rgba(245, 200, 66, 0.18);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            opacity: 0.95;
+            box-shadow: 0 0 32px rgba(245, 200, 66, 0.28);
+        }
+
+        .btn-primary:active:not(:disabled) {
+            transform: scale(0.985);
+            opacity: 0.9;
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .status-success,
+        .status-error {
+            animation: slideIn 0.3s ease forwards;
+        }
+
+        .photo-preview {
+            animation: fadeInScale 0.3s ease forwards;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes fadeInScale {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .mobile-safe {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        .chip {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+        }
+
+        .chip-dot {
+            background: var(--accent);
+            box-shadow: 0 0 8px rgba(245, 200, 66, 0.4);
+        }
+
+        .retake-btn {
+            background: rgba(26, 26, 26, 0.92);
+            border: 1px solid var(--border);
+            color: var(--text);
+            backdrop-filter: blur(8px);
+        }
+
+        .retake-btn:active {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .preview-frame {
+            background: #0a0a0a;
+            border: 1px solid var(--border);
+        }
+
+        .file-badge {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--muted);
+            font-family: var(--mono);
+        }
+
+        /* Status banners — dark variants */
+        .status-banner-success {
+            background: rgba(61, 220, 132, 0.1);
+            border: 1px solid rgba(61, 220, 132, 0.28);
+            color: #b8f5d4;
+        }
+
+        .status-banner-error {
+            background: rgba(255, 68, 68, 0.1);
+            border: 1px solid rgba(255, 68, 68, 0.28);
+            color: #ffb3b3;
+        }
+
+        .status-banner-info {
+            background: rgba(245, 200, 66, 0.08);
+            border: 1px solid rgba(245, 200, 66, 0.25);
+            color: #ffe680;
+        }
+
+        .header-bar {
+            background: var(--bg);
+            border-bottom: 1px solid var(--border);
+            padding: 14px 0 12px;
+        }
+
+        /* Native file inputs must NOT use display:none — many mobile browsers
+           block programmatic/label activation on display:none file inputs. */
+        .file-input-native {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+            opacity: 0;
+        }
+
+        .picker-btn {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            padding: 0.7rem 0.75rem;
+            border-radius: 0.75rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            border: 1px solid var(--border);
+            background: var(--surface2);
+            color: var(--text);
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        .picker-btn:active {
+            transform: scale(0.98);
+            border-color: var(--accent);
+        }
+
+        .picker-btn i {
+            color: var(--accent);
+            margin-right: 0.4rem;
+        }
+
+        /* Date input calendar icon contrast on WebKit */
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(0.85);
+            opacity: 0.7;
+            cursor: pointer;
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        gbg: '#0f0f0f',
+                        gsurface: '#1a1a1a',
+                        gsurface2: '#242424',
+                        gborder: '#2e2e2e',
+                        gaccent: '#f5c842',
+                        gtext: '#f0f0f0',
+                        gmuted: '#888888',
+                    },
+                    fontFamily: {
+                        display: ['Syne', 'sans-serif'],
+                        sans: ['DM Sans', 'sans-serif'],
+                        mono: ['DM Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gbg min-h-screen pb-8 mobile-safe text-gtext">
+    <!-- Header — wordmark matches CigAudit: accent prefix + white suffix, Syne 800, no icon -->
+    <div class="header-bar sticky top-0 z-50">
+        <div class="max-w-md mx-auto px-5 flex items-center justify-between gap-3">
+            <div class="logo">Inv<span>Upload</span></div>
+            <div class="chip inline-flex items-center gap-2 rounded-full px-3 py-1.5">
+                <span class="chip-dot w-2 h-2 rounded-full shrink-0"></span>
+                <span class="mono text-[10px] text-gtext tracking-wide">SECURE</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- PIN Gate — shown until a valid session exists -->
+    <div id="pinGate" class="max-w-md mx-auto px-4 pt-6" style="display:none">
+        <div class="mb-5 px-1">
+            <h1 class="heading-font text-2xl tracking-tight text-gtext">Enter Store PIN</h1>
+            <p class="text-gmuted text-sm mt-1.5 leading-relaxed">
+                Ask your manager for the store PIN if you don't have it.
+            </p>
+        </div>
+        <div class="form-card rounded-2xl p-5">
+            <form id="pinForm" class="space-y-5">
+                <div>
+                    <div class="section-label mb-2 px-0.5">Store PIN</div>
+                    <div class="relative field-wrap">
+                        <div class="absolute left-3.5 top-1/2 -translate-y-1/2 field-icon">
+                            <i class="fa-solid fa-key text-sm"></i>
+                        </div>
+                        <input
+                            type="text"
+                            id="pinGateInput"
+                            name="pin"
+                            required
+                            placeholder="Enter PIN (e.g. 1234)"
+                            class="field-input"
+                            autocomplete="off"
+                            inputmode="numeric"
+                            pattern="[0-9]*"
+                        >
+                    </div>
+                    <p id="pinGateError" class="mono text-[10px] text-red-400 mt-1.5 px-0.5"></p>
+                </div>
+                <button type="submit" id="pinGateSubmit" class="w-full submit-btn rounded-xl py-3.5 font-semibold text-sm">
+                    Continue
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div id="mainApp" class="max-w-md mx-auto px-4 pt-6" style="display:none">
+        <!-- Welcome -->
+        <div class="mb-5 px-1">
+            <h1 class="heading-font text-2xl tracking-tight text-gtext">Upload Invoice</h1>
+            <p class="text-gmuted text-sm mt-1.5 leading-relaxed">
+                Take a clear photo of the invoice and submit with your store details.
+                <span id="storeChip" class="block mono text-[10px] text-gmuted mt-1"></span>
+            </p>
+        </div>
+
+        <!-- Main Form Card -->
+        <div class="form-card rounded-2xl p-5">
+            <form id="uploadForm" class="space-y-5">
+
+                <!-- Invoice Date -->
+                <div>
+                    <div class="section-label mb-2 px-0.5">Invoice Date</div>
+                    <div class="relative field-wrap">
+                        <div class="absolute left-3.5 top-1/2 -translate-y-1/2 field-icon pointer-events-none">
+                            <i class="fa-solid fa-calendar text-sm"></i>
+                        </div>
+                        <input
+                            type="date"
+                            id="invoice_date"
+                            name="invoice_date"
+                            required
+                            class="field-input"
+                        >
+                    </div>
+                </div>
+
+                <!-- Invoice Number -->
+                <div>
+                    <div class="section-label mb-2 px-0.5">Invoice Number</div>
+                    <div class="relative field-wrap">
+                        <div class="absolute left-3.5 top-1/2 -translate-y-1/2 field-icon">
+                            <i class="fa-solid fa-hashtag text-sm"></i>
+                        </div>
+                        <input
+                            type="text"
+                            id="invoice_number"
+                            name="invoice_number"
+                            required
+                            placeholder="INV-123456 or receipt #"
+                            class="field-input"
+                            autocomplete="off"
+                        >
+                    </div>
+                </div>
+
+                <!-- Photo Upload -->
+                <div>
+                    <div class="section-label mb-2 px-0.5">Invoice Photo</div>
+
+                    <!-- Custom upload area — file inputs NESTED in labels (most reliable on iOS/Android) -->
+                    <div id="uploadArea" class="upload-area rounded-2xl p-5 text-center">
+                        <div class="flex flex-col items-center">
+                            <div class="w-14 h-14 rounded-2xl flex items-center justify-center mb-3 border border-gborder"
+                                 style="background: var(--bg);">
+                                <i class="fa-solid fa-image text-2xl" style="color: var(--accent);"></i>
+                            </div>
+                            <div class="font-semibold text-gtext text-sm">Add Invoice Photo or PDF</div>
+                            <div class="mono text-[10px] text-gmuted mt-1.5 tracking-wide mb-4">JPG, PNG, WEBP, HEIC, PDF · max 10 MB</div>
+                            <div class="flex flex-col sm:flex-row gap-2 w-full max-w-xs">
+                                <label id="btnGallery" class="picker-btn">
+                                    <i class="fa-solid fa-folder-open"></i>
+                                    Gallery / Files
+                                    <input
+                                        type="file"
+                                        id="photo"
+                                        name="photo"
+                                        accept="image/*,.jpg,.jpeg,.png,.webp,.heic,.heif,.pdf,application/pdf"
+                                        required
+                                        class="file-input-native"
+                                    >
+                                </label>
+                                <label id="btnCamera" class="picker-btn">
+                                    <i class="fa-solid fa-camera"></i>
+                                    Take Photo
+                                    <input
+                                        type="file"
+                                        id="photoCamera"
+                                        accept="image/*"
+                                        capture="environment"
+                                        class="file-input-native"
+                                        tabindex="-1"
+                                    >
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Preview -->
+                    <div id="previewContainer" class="hidden mt-3">
+                        <div class="relative rounded-2xl overflow-hidden preview-frame">
+                            <img id="previewImage" class="w-full max-h-[220px] object-contain photo-preview" alt="Invoice preview">
+                            <div id="previewPdf" class="hidden w-full min-h-[140px] flex flex-col items-center justify-center gap-2 py-8 px-4" style="background: var(--bg);">
+                                <i class="fa-solid fa-file-pdf text-4xl" style="color: var(--accent);"></i>
+                                <div class="text-sm font-semibold text-gtext">PDF ready to upload</div>
+                                <div id="previewPdfName" class="text-[11px] text-gmuted mono truncate max-w-full px-2"></div>
+                            </div>
+                            <div class="absolute top-2 right-2 flex gap-1.5">
+                                <button
+                                    type="button"
+                                    onclick="retakePhoto()"
+                                    class="retake-btn px-2.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 active:scale-95 transition"
+                                >
+                                    <i class="fa-solid fa-redo text-[10px]"></i>
+                                    <span>Retake</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="fileInfo" class="text-[10px] text-gmuted mt-2 px-0.5 flex items-center justify-between">
+                            <!-- populated by JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <button
+                    type="submit"
+                    id="submitBtn"
+                    class="btn-primary w-full mt-1 py-3.5 rounded-[10px] text-[15px] flex items-center justify-center gap-2"
+                >
+                    <span id="btnText">Upload Invoice</span>
+                    <i id="btnIcon" class="fa-solid fa-arrow-up ml-0.5"></i>
+                </button>
+
+                <div class="text-center pt-0.5">
+                    <p class="mono text-[10px] text-gmuted tracking-wide">Your upload is private and stored securely.</p>
+                </div>
+            </form>
+        </div>
+
+        <!-- Status Messages -->
+        <div id="statusContainer" class="hidden mt-4 mx-0.5">
+            <div id="statusMessage" class="px-4 py-3 rounded-2xl text-sm font-medium flex items-start gap-3">
+                <!-- JS injected content -->
+            </div>
+        </div>
+
+        <!-- Footer info -->
+        <div class="mt-8 text-center px-1">
+            <div class="inline-flex items-center gap-2 mono text-[10px] text-gmuted tracking-[0.08em] uppercase">
+                <i class="fa-solid fa-shield-halved" style="color: var(--accent);"></i>
+                <span>Secure · Fast · Mobile Optimized</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tailwind script config
+        function initializeTailwind() {
+            // Already using CDN, this just ensures classes work
+            console.log('%c[InvUpload] Mobile-friendly upload form ready', 'color:#f5c842');
+        }
+
+        // Elements
+        const pinGate = document.getElementById('pinGate');
+        const mainApp = document.getElementById('mainApp');
+        const pinForm = document.getElementById('pinForm');
+        const pinGateInput = document.getElementById('pinGateInput');
+        const pinGateError = document.getElementById('pinGateError');
+        const pinGateSubmit = document.getElementById('pinGateSubmit');
+        const storeChip = document.getElementById('storeChip');
+
+        const form = document.getElementById('uploadForm');
+        const dateInput = document.getElementById('invoice_date');
+        const numberInput = document.getElementById('invoice_number');
+        const photoInput = document.getElementById('photo');
+        const photoCameraInput = document.getElementById('photoCamera');
+        const btnGallery = document.getElementById('btnGallery');
+        const btnCamera = document.getElementById('btnCamera');
+        const uploadArea = document.getElementById('uploadArea');
+        const previewContainer = document.getElementById('previewContainer');
+        const previewImage = document.getElementById('previewImage');
+        const previewPdf = document.getElementById('previewPdf');
+        const previewPdfName = document.getElementById('previewPdfName');
+        const fileInfo = document.getElementById('fileInfo');
+        const submitBtn = document.getElementById('submitBtn');
+        const btnText = document.getElementById('btnText');
+        const btnIcon = document.getElementById('btnIcon');
+        const statusContainer = document.getElementById('statusContainer');
+        const statusMessage = document.getElementById('statusMessage');
+
+        let selectedFile = null;
+
+        /** Keep the named form field in sync so HTML required + FormData stay happy. */
+        function assignToPhotoInput(file) {
+            try {
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                photoInput.files = dt.files;
+            } catch (err) {
+                // Older browsers: rely on selectedFile for FormData
+                console.warn('[InvUpload] DataTransfer assign failed', err);
+            }
+        }
+
+        function isPdfFile(file) {
+            if (!file) return false;
+            const t = (file.type || '').toLowerCase();
+            if (t === 'application/pdf' || t === 'application/x-pdf') return true;
+            return /\.pdf$/i.test(file.name || '');
+        }
+
+        function isImageFile(file) {
+            if (!file) return false;
+            const t = (file.type || '').toLowerCase();
+            if (t.startsWith('image/')) return true;
+            // Android camera often omits type
+            if (!t && !isPdfFile(file)) return true;
+            return /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name || '');
+        }
+
+        function validateUploadFile(file) {
+            if (!file) return 'No file selected.';
+            if (file.size > 10 * 1024 * 1024) return 'Maximum allowed size is 10 MB. Please choose a smaller file.';
+            if (isPdfFile(file) || isImageFile(file)) return null;
+            return 'Please select a photo (JPG/PNG/HEIC) or a PDF invoice.';
+        }
+
+        function handlePickedFile(file, sourceInput) {
+            const err = validateUploadFile(file);
+            if (err) {
+                showStatus('error', 'Invalid file', err);
+                if (sourceInput) sourceInput.value = '';
+                return;
+            }
+            assignToPhotoInput(file);
+            showFilePreview(file);
+            hideStatus();
+        }
+
+        // Set default date to today
+        function setDefaultDate() {
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            dateInput.value = `${yyyy}-${mm}-${dd}`;
+        }
+
+        // Show status message
+        function showStatus(type, title, message, autoHide = false) {
+            statusContainer.classList.remove('hidden');
+            statusContainer.classList.add('status-success', 'status-error');
+
+            let icon = '';
+            let bannerClass = '';
+
+            if (type === 'success') {
+                icon = '<i class="fa-solid fa-check-circle mt-0.5" style="color:#3ddc84"></i>';
+                bannerClass = 'status-banner-success';
+            } else if (type === 'error') {
+                icon = '<i class="fa-solid fa-exclamation-circle mt-0.5" style="color:#ff4444"></i>';
+                bannerClass = 'status-banner-error';
+            } else {
+                icon = '<i class="fa-solid fa-info-circle mt-0.5" style="color:#f5c842"></i>';
+                bannerClass = 'status-banner-info';
+            }
+
+            statusMessage.className = `px-4 py-3 rounded-2xl text-sm font-medium flex items-start gap-3 ${bannerClass}`;
+            statusMessage.innerHTML = `
+                <div class="shrink-0">${icon}</div>
+                <div class="flex-1">
+                    <div class="font-semibold">${title}</div>
+                    <div class="text-xs mt-0.5 opacity-90 leading-snug">${message}</div>
+                </div>
+            `;
+
+            if (autoHide) {
+                setTimeout(() => {
+                    statusContainer.classList.add('hidden');
+                }, 4500);
+            }
+        }
+
+        function hideStatus() {
+            statusContainer.classList.add('hidden');
+        }
+
+        // Photo / PDF preview
+        function showFilePreview(file) {
+            selectedFile = file;
+            previewContainer.classList.remove('hidden');
+            uploadArea.classList.add('hidden');
+
+            const sizeKB = (file.size / 1024).toFixed(1);
+            const badge = isPdfFile(file) ? 'PDF' : 'IMG';
+            fileInfo.innerHTML = `
+                <div class="flex items-center justify-between w-full gap-2">
+                    <span class="truncate max-w-[170px] text-gmuted">${file.name}</span>
+                    <span class="file-badge text-[10px] px-1.5 py-0.5 rounded shrink-0">${badge} · ${sizeKB} KB</span>
+                </div>
+            `;
+
+            if (isPdfFile(file)) {
+                previewImage.classList.add('hidden');
+                previewImage.removeAttribute('src');
+                if (previewPdf) previewPdf.classList.remove('hidden');
+                if (previewPdfName) previewPdfName.textContent = file.name || 'invoice.pdf';
+                return;
+            }
+
+            if (previewPdf) previewPdf.classList.add('hidden');
+            previewImage.classList.remove('hidden');
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                previewImage.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function retakePhoto() {
+            photoInput.value = '';
+            if (photoCameraInput) photoCameraInput.value = '';
+            selectedFile = null;
+            previewContainer.classList.add('hidden');
+            uploadArea.classList.remove('hidden');
+            fileInfo.innerHTML = '';
+            previewImage.classList.remove('hidden');
+            previewImage.removeAttribute('src');
+            if (previewPdf) previewPdf.classList.add('hidden');
+            if (previewPdfName) previewPdfName.textContent = '';
+            hideStatus();
+        }
+
+        // Gallery / Files picker (no capture attribute)
+        photoInput.addEventListener('change', function() {
+            if (this.files && this.files[0]) handlePickedFile(this.files[0], this);
+        });
+
+        // Camera picker (capture=environment on this input only)
+        if (photoCameraInput) {
+            photoCameraInput.addEventListener('change', function() {
+                if (this.files && this.files[0]) handlePickedFile(this.files[0], this);
+            });
+        }
+
+        // Drag and drop support (bonus for desktop)
+        uploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', function() {
+            this.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            this.classList.remove('dragover');
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                handlePickedFile(e.dataTransfer.files[0], null);
+            }
+        });
+
+        // Form submission
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            hideStatus();
+
+            const invoiceDate = dateInput.value;
+            const invoiceNumber = numberInput.value.trim();
+            const file = photoInput.files[0] || selectedFile;
+
+            // Client validation
+            if (!invoiceDate) {
+                showStatus('error', 'Date required', 'Please select the invoice date.');
+                return;
+            }
+            if (!invoiceNumber) {
+                showStatus('error', 'Invoice # required', 'Please enter the invoice number.');
+                numberInput.focus();
+                return;
+            }
+            if (!file) {
+                showStatus('error', 'File required', 'Please take a photo or select a photo/PDF of the invoice.');
+                return;
+            }
+            const fileErr = validateUploadFile(file);
+            if (fileErr) {
+                showStatus('error', 'Invalid file', fileErr);
+                return;
+            }
+
+            // UI: loading state
+            const originalText = btnText.textContent;
+            submitBtn.disabled = true;
+            btnText.textContent = 'Uploading...';
+            btnIcon.className = 'fa-solid fa-spinner fa-spin ml-0.5';
+
+            try {
+                const formData = new FormData();
+                formData.append('invoice_date', invoiceDate);
+                formData.append('invoice_number', invoiceNumber);
+                formData.append('photo', file);
+
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'same-origin'
+                });
+
+                if (response.status === 401) {
+                    // Session expired mid-use — send back to the PIN gate
+                    showPinGate();
+                    return;
+                }
+
+                // Nginx 413 / HTML error pages are not JSON
+                const raw = await response.text();
+                let result = null;
+                try {
+                    result = raw ? JSON.parse(raw) : null;
+                } catch (_) {
+                    result = null;
+                }
+
+                if (response.ok && result && result.success) {
+                    // Success!
+                    showStatus(
+                        'success',
+                        'Upload Successful!',
+                        `${result.message}<br>Store: <strong>${result.store}</strong><br>ID: <span class="mono">${result.id}</span>`
+                    );
+
+                    // Reset form
+                    form.reset();
+                    retakePhoto();
+                    setDefaultDate(); // reset date
+
+                    // Optional: scroll to status
+                    statusContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                } else if (response.status === 413) {
+                    showStatus(
+                        'error',
+                        'File too large',
+                        'Server rejected the file (over size limit). Use a photo under 10 MB, or compress the PDF and try again.'
+                    );
+                } else if (result) {
+                    const errorMsg = result.detail || result.message || 'Upload failed. Please try again.';
+                    showStatus('error', 'Upload Failed', errorMsg);
+                } else {
+                    showStatus(
+                        'error',
+                        'Upload Failed',
+                        `Server returned ${response.status}. ${raw ? raw.slice(0, 160) : 'Empty response.'}`
+                    );
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                const name = (error && error.name) || '';
+                const msg = (error && error.message) || String(error || '');
+                let hint = 'Could not reach the server. Check your internet or try again in a moment.';
+                if (/Failed to fetch|NetworkError|Load failed/i.test(msg) || name === 'TypeError') {
+                    hint = 'Network dropped mid-upload (common on cellular or if the file is large). Stay on Wi‑Fi, keep the screen on, and retry. PDF/photo max 10 MB.';
+                }
+                showStatus('error', 'Connection Error', hint);
+            } finally {
+                // Restore button
+                submitBtn.disabled = false;
+                btnText.textContent = originalText || 'Upload Invoice';
+                btnIcon.className = 'fa-solid fa-arrow-up ml-0.5';
+            }
+        });
+
+        // Keyboard support: Enter to submit when ready
+        function setupKeyboardShortcuts() {
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && document.activeElement.tagName === 'INPUT') {
+                    // Let form handle it naturally
+                }
+            });
+        }
+
+        // PIN gate — session check + login
+        function showPinGate() {
+            mainApp.style.display = 'none';
+            pinGate.style.display = '';
+            pinGateInput.value = '';
+            pinGateError.textContent = '';
+            setTimeout(() => pinGateInput.focus(), 300);
+        }
+
+        function showMainApp(store) {
+            pinGate.style.display = 'none';
+            mainApp.style.display = '';
+            storeChip.textContent = store ? `Store: ${store}` : '';
+        }
+
+        async function checkSession() {
+            try {
+                const res = await fetch('/whoami', { credentials: 'same-origin' });
+                if (res.ok) {
+                    const data = await res.json();
+                    showMainApp(data.store);
+                } else {
+                    showPinGate();
+                }
+            } catch (err) {
+                console.error('[InvUpload] Session check failed', err);
+                showPinGate();
+            }
+        }
+
+        pinForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const pin = pinGateInput.value.trim();
+            if (!pin) return;
+
+            pinGateSubmit.disabled = true;
+            pinGateError.textContent = '';
+
+            try {
+                const formData = new FormData();
+                formData.append('pin', pin);
+                const res = await fetch('/login', {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'same-origin'
+                });
+                const result = await res.json();
+
+                if (res.ok && result.success) {
+                    showMainApp(result.store);
+                } else {
+                    pinGateError.textContent = result.detail || 'Incorrect PIN. Try again.';
+                    pinGateInput.value = '';
+                    pinGateInput.focus();
+                }
+            } catch (err) {
+                console.error('[InvUpload] Login failed', err);
+                pinGateError.textContent = 'Could not reach the server. Try again.';
+            } finally {
+                pinGateSubmit.disabled = false;
+            }
+        });
+
+        // Initialize everything
+        function init() {
+            if (window.__invUploadInit) return;
+            window.__invUploadInit = true;
+
+            initializeTailwind();
+            setDefaultDate();
+            setupKeyboardShortcuts();
+            checkSession();
+
+            console.log('%c[InvUpload] Upload form initialized successfully', 'color:#f5c842');
+        }
+
+        // Boot — don't rely only on window.onload (can miss if already complete / cached)
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+        window.addEventListener('load', init);
+
+        // Bonus: allow clicking preview area to retake (already has button)
+        // Also expose a small debug helper in console if needed
+        window.InvUpload = { retakePhoto: () => retakePhoto() };
+    </script>
+</body>
+</html>

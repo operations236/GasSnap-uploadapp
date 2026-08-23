@@ -1,0 +1,14 @@
+{
+  "_comment": "Example only — copy to store_sheets.json or use Master Mapping tab in Google Sheets",
+  "_master_sheet_id": "YOUR_MASTER_OR_SHARED_WORKBOOK_ID",
+  "stores": {
+    "Killbuck": {
+      "sheet_id": "YOUR_MASTER_OR_SHARED_WORKBOOK_ID",
+      "tab": "Inv - Killbuck"
+    },
+    "ARCO": {
+      "sheet_id": "YOUR_MASTER_OR_SHARED_WORKBOOK_ID",
+      "tab": "Inv - ARCO"
+    }
+  }
+}

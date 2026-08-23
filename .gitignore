@@ -1,0 +1,31 @@
+# Secrets & local runtime — never commit
+.env
+.env*
+.envey
+pins.json
+**/pins.json
+store_sheets.json
+**/store_sheets.json
+*credentials*.json
+google-credentials.json
+
+# Python / app runtime
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Uploaded invoices + logs
+uploads/
+logs/
+*.log
+backups/
+certs/
+
+# OS / editor
+.DS_Store
+.claude/settings.local.json
