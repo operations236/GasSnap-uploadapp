@@ -60,7 +60,7 @@ Each vendor can use different invoice formats → **vendor-specific extract_rule
 - After registry edits: `sudo systemctl restart gassnap-upload` then confirm `/health` qa_foot=1.00
 
 ## Working Rules
-- Always read `VISION.md` before starting work on this project.
+- Always read **`AGENTS.md`** (development rules) + `VISION.md` before starting work on this project.
 - Prefer async/background processing.
 - Keep the system simple and maintainable.
 - Flag uncertain extractions for human review.
@@ -68,6 +68,7 @@ Each vendor can use different invoice formats → **vendor-specific extract_rule
 - Do not assume one universal prompt will work for all vendors.
 - Paths: vision/context live next to the app at `/opt/gassnaptools/upload-app/` (not a separate `invoice-upload/` tree).
 - **Google Sheets: append-only by default** (live path + agent re-runs). Never replace/delete sheet rows unless the user explicitly asks.
+- **Git:** private repo https://github.com/operations236/GasSnap-uploadapp — standing commit/push to `origin/main` after verified work (AGENTS.md Rule 14); never stage secrets.
 
 ## Open Questions
 - Should we eventually move from one workbook (tabs per store) to separate spreadsheets per store?

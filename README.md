@@ -5,6 +5,7 @@
 **Public:** https://upload.gassnap.io → uvicorn :8010 (`gassnap-upload.service`)
 
 ## Docs
+- `AGENTS.md` / `CLAUDE.md` — **development rules** (required for agents)
 - `VISION.md` — product goals and principles
 - `CONTEXT.md` — current status and working rules
 - `VENDORS.md` — how to add a vendor
