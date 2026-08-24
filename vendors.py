@@ -496,42 +496,66 @@ OTHER RULES:
         ),
         extract_rules="""
 VENDOR = Red Bull Distribution Company Inc. (RBDC) — energy drink DSD invoice / load sheet.
-Letterhead: "Red Bull Distribution Company Inc.", often Dallas TX PO Box, rbdc.ar@redbull.com,
-www.redbulldistributioncompany.com. Route / Load Sheet / Salesman near top.
-Invoice# is long numeric (e.g. 2036701920). Cust# and Terms (often COD) in header.
+Letterhead: "Red Bull Distribution Company Inc.", often Dallas TX PO Box, rbdc.ar@redbull.com /
+RBDC.AR@redbull.com, www.redbulldistributioncompany.com. Route / Load Sheet / Salesman near top.
+Invoice# is long numeric (e.g. 2036701920, 2037214470). Cust# and Terms (often COD) in header.
+Banner may say **NOT AN INVOICE** — still extract every product ID row (same as picklist).
+Customer / ship-to is top-right store block (e.g. Loudonville Marathon, Marathon / Killbuck) — NOT vendor.
 
 COLUMN LAYOUT (left → right) on thermal delivery tickets:
   ID | QTY | UNITS | DESCRIPTION | PRICE | DEP | DISC | SUGAR | TOTAL
 
 FIELD MAPPING (critical):
-- item_code = ID column (alphanumeric SKU, e.g. RB247584, RB2746). Keep letters + digits exactly.
-- upc = barcode digits printed under the description (usually 12 digits starting 61126…). 
+- item_code = ID column (alphanumeric SKU, e.g. RB247584, RB234435, RB1718, RB36463). Keep letters+digits exactly.
+- upc = barcode digits printed under the description (usually 12 digits starting 61126…).
   Do NOT put the RB… ID into upc. If barcode digits missing, leave upc "".
-- description = flavor/size text (PINK 12OZ LS, SF SEABLUE 12OZ LS, SUGARFREE 8.4OZ LS, etc.).
-- pack_size = size/pack token from description (12OZ LS, 12OZ 4PK, 8.4OZ LS, 8.4OZ 4PK).
-  LS = loose singles; 4PK = 4-pack. Put pack form in pack_size, full text can stay in description.
-- qty_cases = QTY column (often fractional cases, e.g. 0.87, 1.33) — copy as printed.
-  UNITS in parentheses (21) is unit count — do NOT use UNITS as qty_cases; optional note only.
-- cost_per_pack = PRICE column (per-unit/pack wholesale, e.g. 2.28, 1.75). Strip $.
-- amount = TOTAL column line extension. Strip $ and parentheses; use absolute value if shown as (41.73).
+- description = flavor/size text (RED 12OZ LS, ICED 12OZ, PINK 12OZ LS, SUGARFREE 8.4OZ LS, etc.).
+- pack_size = size/pack token from description (12OZ LS, 12OZ, 8.4OZ LS, 8.4OZ 4PK, 20OZ LS).
+  LS = loose singles; 4PK = 4-pack.
+- qty_cases = **QTY** column only — copy as printed (fractional OK: 0.87, 1.33; whole cases OK: 1, 2).
+  UNITS (24) / (21) is unit count — NEVER use UNITS as qty_cases.
+- amount = **TOTAL** column line extension. Strip $ and parentheses; abs if (41.73).
 - ssp_per_pack / ssp_per_unit / cost_per_unit: usually blank (not printed).
-- Ignore DEP, DISC, SUGAR columns for sheet fields (unless needed to recover a blurry TOTAL).
+- DEP / SUGAR columns: ignore for sheet fields.
+
+COST / PRICE vs DISC — two layouts on the same column set (detect which applies per line):
+A) **Case / list PRICE with DISC** (common on full-case delivery; QTY often whole 1, 2…):
+   PRICE is list case $ (e.g. 58.71); DISC is $ off that line (e.g. 8.00); TOTAL = PRICE − DISC when QTY=1
+   (or QTY × (PRICE − DISC) when clear).
+   cost_per_pack = **PRICE − DISC** when DISC > 0, else PRICE.
+   Never leave cost_per_pack = list PRICE when DISC > 0 and TOTAL clearly equals net
+   (e.g. PRICE 58.71 DISC 8.00 TOTAL 50.71 → cost 50.71 not 58.71).
+B) **Unit / fractional QTY** (pickup/return or partial; QTY like 0.87, PRICE like 2.28):
+   cost_per_pack = **PRICE** (unit/pack rate); amount = TOTAL; do not invent large case list prices.
 
 OTHER RULES:
 - Tickets may be delivery OR pickup/return ("Units Picked Up", "Cases Delivered 0"). Still extract every product ID row.
-- Parentheses around TOTAL often mean credit/return formatting — still one product line per ID; amount as positive digits unless a clear minus sign is printed.
-- Skip footer blocks: Units Picked Up, Number of SKU's, Cases/Units Delivered, Subtotal, Sales Tax, SSB/Sugar Tax, Can Deposit, Fees, Invoice Total, signatures.
-- ship_to_* = customer block (often top-right store name/address), not Red Bull Dallas letterhead.
+- Parentheses around TOTAL often mean credit/return formatting — amount as positive digits unless clear minus.
+- Skip footer: Units Picked Up, Number of SKU's, Cases/Units Delivered, TOTALS block labels,
+  DISCOUNT (footer sum), INVOICE, DEPOSIT, TAX, TOTAL DUE, Subtotal, signatures, check image.
+- Foot product sum(amount) ≈ printed **INVOICE** / **TOTAL DUE** after line discounts
+  (sample Loudonville inv 2037214470: four lines $50.71+$50.71+$37.99+$44.38 = **$183.79** = TOTAL DUE;
+   footer DISCOUNT $25.00 is sum of line DISC — already reflected in TOTALS, do not subtract again).
+- ship_to_* = customer block (top-right), not Red Bull Dallas letterhead.
 - One JSON object per product ID row only.
 """.strip(),
         critical_rules=(
+            "VENDOR=Red Bull Distribution Company (RBDC letterhead) — store block is ship-to. "
+            "Banner NOT AN INVOICE still extract products. "
             "COLS: ID|QTY|UNITS|DESC|PRICE|DEP|DISC|SUGAR|TOTAL. "
-            "item_code=ID (RB… exactly); upc=61126… under desc — NEVER put RB id in upc; "
-            "qty_cases=QTY (fractional OK) NOT UNITS; pack_size from desc (12OZ LS, 8.4OZ 4PK); "
-            "cost_per_pack=PRICE; amount=TOTAL (strip $ and parens, abs value). "
-            "SKIP: Units Picked Up, SKU counts, Cases/Units Delivered, Subtotal/Tax/Deposit/Fees/Invoice Total."
+            "item_code=ID (RB… exactly); upc=61126… under desc — NEVER RB id in upc; "
+            "qty_cases=QTY (fractional OK) NOT UNITS; pack_size from desc (12OZ LS, 8.4OZ LS, 20OZ LS); "
+            "amount=TOTAL (strip $ / parens). "
+            "COST: if DISC>0 on full-case lines → cost_per_pack=PRICE−DISC (TOTAL often = net); "
+            "if fractional QTY unit-style → cost_per_pack=PRICE. Never list PRICE as cost when DISC took $ off. "
+            "Foot sum(amount)≈INVOICE/TOTAL DUE (e.g. 2037214470 → $183.79); footer DISCOUNT already in line TOTALS. "
+            "SKIP: Units Picked Up, SKU counts, Cases/Units Delivered, footer DISCOUNT/INVOICE/DEPOSIT/TAX/TOTAL DUE labels."
         ),
-        notes="Validated on Killbuck load sheet 20260727_011518_ec9b2466a3 (RB ID + UPC under desc).",
+        notes=(
+            "Killbuck load sheet 20260727_011518_ec9b2466a3 (fractional QTY + unit PRICE); "
+            "Loudonville photo 20260824_180544_7bb9a02bb7 inv 2037214470 "
+            "(4 lines, TOTAL DUE $183.79, case PRICE−DISC; Loudonville Marathon ship-to)."
+        ),
     ),
     VendorSpec(
         key="esber",

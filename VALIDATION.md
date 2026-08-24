@@ -296,6 +296,35 @@ for it in r["line_items"][:3]:
 PY
 ```
 
+## Red Bull Distribution — Loudonville photo `20260824_180544_7bb9a02bb7.jpeg`
+
+| Field | Value |
+|-------|--------|
+| File | `uploads/20260824_180544_7bb9a02bb7.jpeg` |
+| Store PIN | **Loudonville** (operator prompt may say Newcomerstown — trust upload) |
+| Ship-to | Loudonville Marathon / 236 N Union St |
+| Detect | `red_bull` @ 95 (Red Bull Distribution Company Inc.) |
+| Invoice | **2037214470** · 08/24/2026 · banner NOT AN INVOICE (still extract) |
+| Layout | ID\|QTY\|UNITS\|DESC\|PRICE\|DEP\|DISC\|SUGAR\|TOTAL — full-case QTY=1 + DISC |
+| Lines | **4** |
+| Sum TOTAL | **$183.79** = INVOICE = TOTAL DUE (footer DISCOUNT $25 already in line nets) |
+| Money map | amount=TOTAL; cost=**PRICE−DISC** (not list PRICE); qty=QTY not UNITS |
+| Live first pass | 4 lines sum OK but cost=list PRICE → 4/4 Needs Review (high_line_review_rate) |
+| Forced extract post-harden | **4** lines · **$183.79** · **0** MM · **0** NR · QA foot OK |
+| Sheet | first pass 4 NR rows on `Inv - Loudonville`; append clean 4 after harden |
+| Date checked | 2026-08-24 |
+
+### Anchors
+
+| item_code | qty | list PRICE | DISC | cost net | amount |
+|-----------|-----|------------|------|----------|--------|
+| RB234435 | 1 | 58.71 | 8.00 | **50.71** | 50.71 |
+| RB248998 | 1 | 58.71 | 8.00 | **50.71** | 50.71 |
+| RB1718 | 1 | 45.99 | 8.00 | **37.99** | 37.99 |
+| RB36463 | 1 | 45.38 | 1.00 | **44.38** | 44.38 |
+
+Pipeline also corrects residual list-PRICE cost via post-normalize when qty×cost≠amount (cost>amount/qty).
+
 ---
 
 ## Heidelberg Distributing — sample `20260727_013531_844932cf53.jpeg`

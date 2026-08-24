@@ -207,7 +207,10 @@ Compact retry always keeps full `critical_rules` (PRICE≠NET/DEP, pack ownershi
 
 ## Red Bull Distribution Company (reference)
 
-**Sample:** `uploads/20260727_011518_ec9b2466a3.jpeg` (Killbuck Marathon / load sheet).  
+**Samples:**
+- Killbuck load sheet `uploads/20260727_011518_ec9b2466a3.jpeg` — fractional QTY + unit PRICE
+- Loudonville photo `uploads/20260824_180544_7bb9a02bb7.jpeg` — inv **2037214470**, 4 lines, TOTAL DUE **$183.79**, case PRICE−DISC
+
 **Registry key:** `red_bull`
 
 ### Structure
@@ -216,11 +219,13 @@ Compact retry always keeps full `critical_rules` (PRICE≠NET/DEP, pack ownershi
 Red Bull Distribution Company Inc.     [customer ship-to top-right]
 ...
 ID  QTY  UNITS  DESCRIPTION  PRICE  DEP  DISC  SUGAR  TOTAL
-RB247584  0.87  (21)  PINK 12OZ LS   $2.28  ...  ($41.73)
-                      611269003123          [UPC under desc]
+RB234435  1  24  RED 12OZ LS   $58.71  $0  $8.00  $0  $50.71
+                      611269…          [UPC under desc]
 ...
-Units Picked Up / Subtotal / Tax / Invoice Total   ← not product lines
+Units Picked Up / DISCOUNT / INVOICE / TOTAL DUE   ← not product lines
 ```
+
+Banner may say **NOT AN INVOICE** — still extract products.
 
 ### Schema mapping
 
@@ -228,25 +233,31 @@ Units Picked Up / Subtotal / Tax / Invoice Total   ← not product lines
 |--------|----------------|
 | ID (`RB…`) | `item_code` |
 | UPC under description | `upc` |
-| QTY (fractional cases) | `qty_cases` |
-| UNITS `(n)` | ignore for qty_cases |
-| DESCRIPTION | `description` + pack token → `pack_size` (12OZ LS, 8.4OZ 4PK) |
-| PRICE | `cost_per_pack` |
-| TOTAL | `amount` (strip `$` / parens) |
-| DEP/DISC/SUGAR | not mapped |
+| QTY (fractional or whole cases) | `qty_cases` — never UNITS |
+| UNITS `(n)` | ignore for qty |
+| DESCRIPTION | `description` + pack → `pack_size` |
+| **cost** | dual: fractional/unit → PRICE; full-case with DISC>0 → **PRICE−DISC** (TOTAL often = net) |
+| TOTAL | `amount` |
+| DEP/SUGAR | not mapped |
 | SSP | usually empty |
 
 ### Detection
 
 Aliases: red bull, redbull, RBDC, distribution company name.  
-Live detect on sample → `red_bull` @ 100.
+Live Loudonville 2026-08-24: `red_bull` @ 95 detect+alias.
 
 ### Pitfalls
 
 1. Do not put RB ID into `upc` — UPC is the 61126… digits under the name.  
-2. QTY is fractional cases; UNITS is unit count in parentheses.  
-3. Pickup/return tickets still have product rows (parens on TOTAL).  
-4. Footer SKU counts / tax / deposit lines are not products.
+2. QTY is cases (fractional or whole); UNITS is unit count — never qty_cases=UNITS (24).  
+3. Case delivery with DISC: cost must be net (PRICE−DISC), not list PRICE — else qty×cost floods Needs Review.  
+4. Pickup/return tickets still have product rows (parens on TOTAL).  
+5. Footer DISCOUNT is sum of line DISC already in TOTALS — do not subtract again from packet foot.  
+6. Trust upload store PIN (this sample = **Loudonville**, even if operator said Newcomerstown).
+
+### Sample totals (2026-08-24 Loudonville)
+
+Inv **2037214470**: **4** lines · sum **$183.79** = TOTAL DUE · 0 MM after PRICE−DISC harden · check $183.79.
 
 ---
 

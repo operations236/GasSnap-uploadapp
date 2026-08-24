@@ -619,6 +619,29 @@ def extract_invoice_line_items(
                 unit = str(it.get("ssp_per_unit") or "").strip()
                 if not pack and unit:
                     it["ssp_per_pack"] = unit
+        # Red Bull case tickets: list PRICE with DISC → TOTAL is net. If model left cost=list
+        # PRICE while qty×cost≠amount, prefer amount/qty (or amount when qty=1).
+        if vendor.key == "red_bull":
+            for it in items:
+                q = _parse_money(str(it.get("qty_cases") or ""))
+                c = _parse_money(str(it.get("cost_per_pack") or ""))
+                a = _parse_money(str(it.get("amount") or ""))
+                if q is None or c is None or a is None or q == 0:
+                    continue
+                if abs(q * c - a) < Decimal("0.02"):
+                    continue
+                # Only correct when cost looks like list > net extension (DISC case layout)
+                if c > abs(a / q) and abs(a) > 0:
+                    net = (a / q).quantize(Decimal("0.01"))
+                    it["cost_per_pack"] = f"{net}"
+                    # Recompute review flag after cost fix
+                    conf_i = int(it.get("confidence") or 0)
+                    needs = conf_i < LOW_CONFIDENCE_THRESHOLD
+                    if not str(it.get("item_code") or "").strip():
+                        needs = True
+                    if abs(q * net - a) >= Decimal("0.02"):
+                        needs = True
+                    it["needs_review"] = needs
         try:
             overall = int(data.get("overall_confidence") or 0)
         except (TypeError, ValueError):
