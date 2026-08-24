@@ -178,9 +178,10 @@ Shared 15 sheet columns unchanged — one row per line item.
 ### Detection
 
 - Header `SUPERIOR BEVERAGE` / `Superior Beverage Group`
-- Aliases: superior beverage/group; Glenwillow `diamond parkway` / `31031 diamond`; Akron `1267 s. main` / `main st akron` / `(330) 535-3103`
-- Live detect ARCO sample: `superior_beverage` via address+phone even when logo text is faint
+- Aliases: superior beverage/group; Glenwillow `diamond parkway` / `31031 diamond` (unique DC — OK for identity)
+- Akron `1267 s. main` / `(330) 535-3103` remain on the VendorSpec for extract context / weak cues, but **detect code requires letterhead NAME** on the shared Akron DC (same warehouse as Tramonte) — address/phone alone → `generic` / `no_letterhead`, not a locked `superior_beverage`
 - Customer block (ARCO / VET RETAIL OPS) is **ship-to**, not vendor
+- Shared schema: optional per-line `invoice_number` (full + compact extract) for multi-invoice packets
 
 ### Gemini prompt
 
@@ -559,9 +560,10 @@ No per-line DISC/NET. Footer Discount$/Total Discount is summary only — produc
 ### Detection
 
 - Letterhead `TRAMONTE DISTRIBUTING CO.` / aliases `tramonte`, `tramonte distributing co`
-- Live detect sample → `tramonte` @ 100
-- Do **not** pick Superior from 1267 S Main alone when name says Tramonte
+- Live detect sample → `tramonte` @ 100 when printed name is clear
+- **Shared Akron DC with Superior** (1267 S Main / 330-535-3103): letterhead **NAME** wins in prompt rule 8 **and** in code (`letterhead_name_vendor` + `guard_shared_akron_dc_detect`). Empty/ambiguous printed name or address/phone-only cues → do **not** lock `tramonte` or `superior_beverage` (generic / no_letterhead). Do **not** add shared address/phone as Tramonte aliases.
 - Ship-to ARCO / VET RETAIL OPS / driver names are not the vendor
+- Shared schema + compact retry both carry optional per-line `invoice_number` for multipage split
 
 ### Gemini prompt
 

@@ -158,7 +158,8 @@ def detect_vendor(
         conf = max(0, min(100, conf))
         reason = str(data.get("reason") or "").strip()
 
-        from_name = vendor_registry.match_vendor_text(printed)
+        # Letterhead NAME match (excludes shared Akron DC address/phone alone).
+        from_name = vendor_registry.letterhead_name_vendor(printed)
         from_key = vendor_registry.get_vendor(key_raw)
         key_is_known = from_key.key != vendor_registry.GENERIC.key
         # Trust model key only if confident enough; alias on printed letterhead always OK.
@@ -172,7 +173,9 @@ def detect_vendor(
             chosen = from_name
             source = "alias"
             if key_is_known and from_name.key != from_key.key:
-                reason = (reason + f"; alias overrides detect key {from_key.key}").strip("; ")
+                reason = (reason + f"; alias overrides detect key {from_key.key}").strip(
+                    "; "
+                )
         elif key_ok:
             chosen = from_key
             source = "detect"
@@ -204,6 +207,20 @@ def detect_vendor(
                 reason = (
                     reason + "; no vendor_name_printed — refused key without letterhead"
                 ).strip("; ")
+
+        # Tramonte vs Superior shared Akron DC: name required (code enforces prompt rule 8)
+        g_key, g_source, g_reason, g_conf = vendor_registry.guard_shared_akron_dc_detect(
+            chosen_key=chosen.key,
+            printed_name=printed,
+            source=source,
+            reason=reason,
+            confidence=conf,
+        )
+        if g_key != chosen.key or g_source != source:
+            chosen = vendor_registry.get_vendor(g_key)
+            source = g_source
+            reason = g_reason
+            conf = g_conf
 
         out = {
             "vendor_key": chosen.key,
@@ -637,9 +654,6 @@ def extract_invoice_line_items(
         inv_no = str(data.get("invoice_number") or "").strip() or invoice_number
         inv_date = str(data.get("invoice_date") or "").strip() or invoice_date
 
-        # Backward-compat flag for older metadata consumers
-        is_tramonte = resolved.key == "tramonte"
-
         ship_to_name = str(data.get("ship_to_name") or data.get("customer_name") or "").strip()
         ship_to_address = str(data.get("ship_to_address") or data.get("customer_address") or "").strip()
         ship_to_city = str(data.get("ship_to_city") or "").strip()
@@ -649,7 +663,6 @@ def extract_invoice_line_items(
             "vendor": printed_vendor or resolved.display_name,
             "vendor_key": resolved.key,
             "vendor_display": resolved.display_name,
-            "is_tramonte": bool(is_tramonte),
             "detection": detection,
             "invoice_number": inv_no,
             "invoice_date": inv_date,
@@ -690,7 +703,6 @@ def extract_invoice_line_items(
             "vendor": str(detection.get("vendor_name_printed") or ""),
             "vendor_key": vendor.key,
             "vendor_display": vendor.display_name,
-            "is_tramonte": vendor.key == "tramonte",
             "detection": detection,
             "invoice_number": invoice_number,
             "invoice_date": invoice_date,
@@ -878,7 +890,6 @@ def process_upload_ocr(
                 "vendor": extraction.get("vendor"),
                 "vendor_key": extraction.get("vendor_key"),
                 "vendor_display": extraction.get("vendor_display"),
-                "is_tramonte": extraction.get("is_tramonte"),
                 "detection": extraction.get("detection"),
                 "overall_confidence": extraction.get("overall_confidence"),
                 "item_count": len(extraction.get("line_items") or []),

@@ -43,12 +43,16 @@ Env knobs: `OCR_QA_FOOT_TOLERANCE` (default 1.00), `OCR_QA_REVIEW_RATE` (0.30), 
 | Inv p2 | **10554910** · 13 lines · Cases **20** · Content$/Beer$/Picksheet **$600.86** (incl 41013 qty0 OOS) |
 | Forced extract | **32** lines · sum **$1314.44** · conf 98 · **0** MM · **0** NR · per-line `invoice_number` split 19+13 |
 | Money map | cost=**PRICE**; ssp=SSP; amount=AMOUNT (=QTY×PRICE); do not subtract footer Discount$ |
+| Schema | Full `extract_schema_block` + compact skeleton both include optional line `invoice_number` (multipage) |
+| Shared DC detect | Code requires letterhead name for tramonte/superior on shared Akron warehouse — address/phone alone does not lock |
 | Live first pass | page1-only 19 rows / $713.58 (stub rules) → sheet `Inv - ARCO` |
 | Backfill | append inv **10554910** only (**13** rows) after multipage harden — no replace |
 | Date checked | 2026-08-22 |
 
 Anchors p1: 30210 cost 33.58 amt 33.58; 43011 4×27.19=108.76; 41341 28.79.  
 Anchors p2: 76211 28.79; 41013 qty0 amt0; 41051 2×28.75=57.50; 46050 2×26.82=53.64.
+
+**Re-spot-check** Tramonte anchors above if extract path / schema / compact prompt changes.
 
 ## Ohio Beverage — ARCO East Ave PDF `20260822_190933_7df92c1520`
 

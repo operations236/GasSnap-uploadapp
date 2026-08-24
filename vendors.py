@@ -1040,6 +1040,118 @@ def match_vendor_text(text: str) -> Optional[VendorSpec]:
     return None
 
 
+# Tramonte + Superior share the Akron DC ticket header. Address/phone alone must not
+# lock either key — letterhead company NAME is required (detect_prompt rule 8 + code).
+SHARED_AKRON_DC_VENDOR_KEYS = frozenset({"tramonte", "superior_beverage"})
+# Exact superior.aliases entries that are warehouse cues, not company names.
+_SHARED_AKRON_DC_ALIAS_SET = frozenset(
+    {
+        "1267 s. main",
+        "1267 s main",
+        "s. main st akron",
+        "main st akron",
+        "(330) 535-3103",
+        "330-535-3103",
+    }
+)
+_SHARED_AKRON_DC_REASON_MARKERS = (
+    "1267",
+    "535-3103",
+    "535.3103",
+    "5353103",
+    "main st akron",
+    "s. main",
+    "s main st",
+)
+
+
+def _name_aliases_for_detect(vendor: VendorSpec) -> Tuple[str, ...]:
+    """Company-name aliases/labels — excludes shared Akron DC address/phone cues."""
+    names = tuple(a for a in vendor.aliases if a not in _SHARED_AKRON_DC_ALIAS_SET)
+    labels = tuple(lbl for lbl in (vendor.detect_labels or ()) if lbl)
+    # Preserve order, drop dups
+    seen = set()
+    out: List[str] = []
+    for a in names + labels:
+        if a not in seen:
+            seen.add(a)
+            out.append(a)
+    return tuple(out)
+
+
+def letterhead_name_vendor(text: str) -> Optional[VendorSpec]:
+    """
+    Match vendor from printed letterhead/company name.
+
+    Unlike match_vendor_text, shared Akron DC address/phone aliases alone never
+    select tramonte or superior_beverage (would steal the other brand's tickets).
+    Glenwillow-only Superior address aliases still count as Superior identity cues.
+    """
+    t = (text or "").strip().lower()
+    if not t:
+        return None
+    for v in VENDORS:
+        if v.key in SHARED_AKRON_DC_VENDOR_KEYS:
+            if any(a in t for a in _name_aliases_for_detect(v)):
+                return v
+        elif v.matches(t):
+            return v
+    return None
+
+
+def guard_shared_akron_dc_detect(
+    *,
+    chosen_key: str,
+    printed_name: str,
+    source: str,
+    reason: str,
+    confidence: int,
+) -> Tuple[str, str, str, int]:
+    """
+    Enforce letterhead NAME when finalizing tramonte vs superior_beverage.
+
+    - Clear printed name → that vendor (alias wins).
+    - Empty/ambiguous printed name, or only shared Akron address/phone cues →
+      do not lock tramonte/superior (generic + no_letterhead, conf capped).
+    Returns (vendor_key, source, reason, confidence).
+    """
+    printed = (printed_name or "").strip()
+    name_hit = letterhead_name_vendor(printed)
+    key = (chosen_key or "").strip().lower() or GENERIC.key
+
+    if name_hit and name_hit.key in SHARED_AKRON_DC_VENDOR_KEYS:
+        if name_hit.key != key:
+            reason2 = (
+                reason + f"; letterhead name → {name_hit.key} (shared Akron DC)"
+            ).strip("; ")
+            return name_hit.key, "alias", reason2, confidence
+        return key, source, reason, confidence
+
+    if key not in SHARED_AKRON_DC_VENDOR_KEYS:
+        return key, source, reason, confidence
+
+    # Chosen tramonte/superior without a clear company-name letterhead match.
+    reason_l = (reason or "").lower()
+    printed_l = printed.lower()
+    shared_cue_in_printed = bool(printed) and (
+        any(c in printed_l for c in _SHARED_AKRON_DC_ALIAS_SET)
+        or any(m in printed_l for m in _SHARED_AKRON_DC_REASON_MARKERS)
+    )
+    # Printed text that only matched via shared cues (letterhead_name_vendor missed)
+    only_shared_printed = bool(printed) and shared_cue_in_printed and name_hit is None
+    empty_or_ambiguous = (not printed) or only_shared_printed
+    shared_in_reason = any(m in reason_l for m in _SHARED_AKRON_DC_REASON_MARKERS)
+
+    if empty_or_ambiguous or shared_in_reason or name_hit is None:
+        reason2 = (
+            reason
+            + f"; shared Akron DC — letterhead name required (refused {key})"
+        ).strip("; ")
+        return GENERIC.key, "no_letterhead", reason2, min(int(confidence or 0), 40)
+
+    return key, source, reason, confidence
+
+
 def detect_prompt() -> str:
     """Short Gemini prompt: classify invoice vendor from letterhead only."""
     catalog = []
@@ -1115,6 +1227,7 @@ Return ONLY valid JSON (no markdown) with this shape:
       "ssp_per_pack": "string — suggested selling price per pack if shown (SRP/SSP/Reg Retail)",
       "ssp_per_unit": "string — suggested price per unit if shown",
       "amount": "string — line extension / line total",
+      "invoice_number": "string — this row's picklist/invoice # when the packet has multiple invoices/pages; else empty or omit",
       "confidence": integer 0-100
     }
   ],
@@ -1207,7 +1320,7 @@ def build_compact_extract_prompt(vendor: VendorSpec) -> str:
         '"ship_to_name":"","ship_to_address":"","ship_to_city":"",'
         '"overall_confidence":0,"line_items":[{"upc":"","item_code":"","description":"","pack_size":"",'
         '"qty_cases":"","cost_per_pack":"","cost_per_unit":"","ssp_per_pack":"",'
-        '"ssp_per_unit":"","amount":"","confidence":0}],"notes":""}\n'
+        '"ssp_per_unit":"","amount":"","invoice_number":"","confidence":0}],"notes":""}\n'
     )
     header = f"Vendor focus: {vendor.display_name} ({vendor.key}).\n"
     global_crit = f"{_GLOBAL_COMPACT_CRITICAL}\n"
