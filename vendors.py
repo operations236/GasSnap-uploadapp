@@ -1027,6 +1027,87 @@ OTHER RULES:
             "(Soft Drink 31 cases; cost=PRICE−DISC; S.S.→ssp)."
         ),
     ),
+    VendorSpec(
+        key="southeast_beverage",
+        display_name="Southeast Beverage Co.",
+        aliases=(
+            "southeast beverage",
+            "southeast beverage co",
+            "southeast beverage co.",
+            "south east beverage",
+            "se beverage",
+            # Athens OH DC
+            "p.o. box 180",
+            "po box 180",
+            "athens, oh 45701",
+            "athens oh 45701",
+            "(740) 593-3353",
+            "740-593-3353",
+        ),
+        detect_labels=(
+            "southeast beverage",
+            "southeast beverage co",
+            "southeast beverage company",
+        ),
+        extract_rules="""
+VENDOR = Southeast Beverage Co. (Athens OH beverage / beer / soft-drink DSD).
+Letterhead top: "SOUTHEAST BEVERAGE CO.", P.O. BOX 180, ATHENS, OH 45701, (740) 593-3353.
+Customer / ship-to (e.g. EAGLE BP, 550 EAST STATE ST NEW CUMBERLAND OH 43832) is NOT the vendor.
+Driver / salesrep names (e.g. ANTONIO BROWN, B HIGGEMYER) are NOT the vendor.
+Check payee "Southeast" confirms vendor when letterhead is cropped.
+
+COLUMN LAYOUT (left → right) — thermal delivery ticket:
+  ITEM# | QTY | DESCRIPTION | U.P.C. | SSP | PRICE | DISC | UNIT PRICE | DEP | EXT
+Pack size often sits in the DESCRIPTION (e.g. 4/6CN, 24/16OZ NR, 12/19.2OZ, 12/6OZ NR).
+
+FIELD MAPPING (critical):
+- item_code = ITEM# (full digits, e.g. 11600, 80083, 91137).
+- upc = U.P.C. barcode under/near description (keep leading zeros). Always capture both when both print.
+- description = brand/flavor words; pack_size = trailing pack token from description
+  (4/6CN, 24/16OZ NR, 24/25OZ NR, 12/19.2OZ, 12/16OZ, 12/6OZ NR, 24/16OZ NR, …).
+- qty_cases = **QTY** (cases). Never use Selling Units Total or pack “24/…” as qty.
+- ssp_per_pack = **SSP** (shelf / suggested). NEVER put SSP into cost.
+- cost_per_pack = **UNIT PRICE** when printed (net case cost after discount).
+  If UNIT PRICE blank: cost = PRICE − DISC when DISC > 0, else PRICE.
+  Never put SSP into cost. Never put DEP into cost.
+- amount = **EXT** (extension). Must equal QTY × cost when clear (e.g. 4 × 4.99 = 19.96).
+- cost_per_unit / ssp_per_unit: leave empty unless explicitly per-unit.
+- DEP is deposit (usually 0.00) — unmapped.
+
+COMPLETENESS + FOOT:
+- Extract every ITEM# product row top→bottom until category footers (Beer / Soft Drink / …).
+- Foot sum(amount) ≈ **Total Content** / **Total Sales** / **Invoice Total**
+  (validated Newcomerstown sample inv **162891**: 10 lines, Total Content = Invoice Total = check **$240.86**;
+   Beer $54.38 + Soft Drink $186.48 = $240.86).
+- Total Discount footer is summary only — already reflected in UNIT PRICE / EXT when DISC applied.
+- Prefer printed Invoice# (e.g. 162891) over a mistyped operator # when both differ by one digit.
+
+SKIP (not product lines):
+- Beer / Wine & Liq / Soft Drink / Misc / Credits category $ summary rows
+- Selling Units Total
+- Total Sales, Total Discount, Total Content, Total Deposit, Total Credits, Over/Short, Invoice Total
+- Customer Signature / Driver Signature, check image, barcode-only columns without product text
+- Account / Load / License / PO# / Terms / Driver / Salesrep header fields alone
+
+One JSON object per product ITEM# row only.
+""".strip(),
+        critical_rules=(
+            "VENDOR=Southeast Beverage Co. (Athens OH P.O. Box 180 / (740)593-3353) — "
+            "EAGLE BP / ship-to / driver NOT vendor. "
+            "COLS: ITEM#|QTY|DESC|UPC|SSP|PRICE|DISC|UNIT PRICE|DEP|EXT. "
+            "item_code=ITEM#; upc=U.P.C.; qty_cases=QTY not units/pack digits; "
+            "ALWAYS fill ssp_per_pack from SSP column (e.g. 12.99, 5.99, 2.89, 0.99) — never leave blank when printed; "
+            "ssp never goes into cost; cost_per_pack=UNIT PRICE (or PRICE−DISC if UNIT blank); "
+            "amount=EXT (=QTY×cost). pack_size from desc (4/6CN, 24/16OZ NR, 12/19.2OZ…). "
+            "Foot sum≈Total Content/Invoice Total (e.g. inv 162891 → $240.86 / 10 lines). "
+            "SKIP: Beer/Soft Drink category $ rows, Selling Units Total, Total Sales/Content/Deposit/Invoice Total, signatures."
+        ),
+        notes=(
+            "Newcomerstown EAGLE BP photo 20260824_233516_46e8959b51.jpeg "
+            "inv 162891 (user typed 162892): 10 lines, Total Content/Invoice/check $240.86; "
+            "cols SSP|PRICE|DISC|UNIT PRICE|DEP|EXT; cost=UNIT PRICE; first live pass generic."
+        ),
+    ),
     # Non-beer wholesalers still hit c-stores — keep generic rules strong
     VendorSpec(
         key="coremark",

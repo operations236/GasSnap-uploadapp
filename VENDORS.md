@@ -512,6 +512,58 @@ Soft Drink category $119.00 = Picksheet Total. Handwritten $496.16 is payment me
 
 ---
 
+## Southeast Beverage Co. (reference)
+
+**Sample:** `uploads/20260824_233516_46e8959b51.jpeg` (Newcomerstown / EAGLE BP).  
+**Registry key:** `southeast_beverage`
+
+### Structure
+
+```
+SOUTHEAST BEVERAGE CO.
+P.O. BOX 180  ATHENS, OH 45701  (740) 593-3353
+Customer: EAGLE BP / NEW CUMBERLAND OH   ← ship-to, not vendor
+
+ITEM# QTY DESCRIPTION  U.P.C.  SSP  PRICE  DISC  UNIT PRICE  DEP  EXT
+11600 1 SEVENTH SON… 4/6CN  858439006380  12.99  54.38  0  54.38  0  54.38
+80083 4 ALP SPRINGS 24/16OZ NR  …  5.99  4.99  0  4.99  0  19.96
+…
+Beer / Soft Drink category $ rows   ← skip
+Total Content / Invoice Total 240.86
+```
+
+### Schema mapping
+
+| Ticket | JSON / sheet |
+|--------|----------------|
+| ITEM# | `item_code` |
+| U.P.C. | `upc` |
+| QTY | `qty_cases` |
+| pack token in DESCRIPTION | `pack_size` (4/6CN, 24/16OZ NR, …) |
+| SSP | `ssp_per_pack` (soft OCR — model may blank; money still foots) |
+| UNIT PRICE (or PRICE−DISC) | `cost_per_pack` |
+| EXT | `amount` |
+| DEP | unmapped |
+
+### Detection
+
+Aliases: southeast beverage, southeast beverage co, Athens P.O. Box 180, (740) 593-3353.  
+Do **not** alias EAGLE BP / driver names. Live detect after registry → `southeast_beverage` @ 95–100.
+
+### Sample totals (2026-08-24 Newcomerstown)
+
+Inv **162891** (user typed 162892 — prefer printed): **10** lines · sum EXT **$240.86** = Total Content = Invoice Total = check.  
+Beer $54.38 + Soft Drink $186.48. 0 MM after `southeast_beverage` extract. First live pass was `generic` / weak_detect.
+
+### Pitfalls
+
+1. Ship-to EAGLE BP is not the vendor.  
+2. cost = UNIT PRICE (net case), not SSP.  
+3. Skip category Beer/Soft Drink $ summaries and Selling Units Total.  
+4. Prefer printed Invoice# over operator one-digit typo.
+
+---
+
 ## Current registry keys
 
 See `vendors.list_vendors()` or `/health` → `ocr.vendors`:
@@ -528,6 +580,7 @@ See `vendors.list_vendors()` or `/health` → `ocr.vendors`:
 - `abarta_coke`
 - `beverage_distributors`
 - `rl_lipton`
+- `southeast_beverage` — **Production-ready** (Newcomerstown 162891 $240.86)
 - `coremark`
 - `generic` (fallback)
 

@@ -30,6 +30,7 @@
 | `abarta_coke` | **Production-ready** — ABARTA Coke PDF `20260728_195542_4926bd4c5b` Parma INV 5349998035 (36 lines, $1188.36) |
 | `beverage_distributors` | **Production-ready** — BDI Cleveland PDF `20260821_153032_ae66fc2717` Parma inv 787548 (28 lines, EXT $1220.64 / 48 cases; cost=NET) |
 | `rl_lipton` | **Production-ready** — Parma 443756/443755 + **ARCO** PDF `20260822_185810_49eed16da1` inv **443513** (18 lines, $454.35, Soft Drink 31; cost=PRICE−DISC; QA foot OK) |
+| `southeast_beverage` | **Production-ready** — Newcomerstown EAGLE BP photo `20260824_233516_46e8959b51` inv **162891** (10 lines, Total Content **$240.86**; cost=UNIT PRICE; first live generic) |
 | `coremark` | Registered |
 | `generic` | Fallback |
 

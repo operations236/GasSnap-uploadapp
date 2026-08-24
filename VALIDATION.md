@@ -658,3 +658,31 @@ print(sheets.replace_invoice_rows_for_store(
 ))
 PY
 ```
+
+## Southeast Beverage — Newcomerstown photo `20260824_233516_46e8959b51.jpeg`
+
+| Field | Value |
+|-------|--------|
+| File | `uploads/20260824_233516_46e8959b51.jpeg` |
+| Store PIN | **Newcomerstown** |
+| Ship-to | EAGLE BP / NEW CUMBERLAND OH 43832 |
+| Letterhead | SOUTHEAST BEVERAGE CO. · P.O. BOX 180 · ATHENS OH 45701 · (740) 593-3353 |
+| Invoice | printed **162891** (user typed 162892 — prefer printed) |
+| Layout | ITEM#\|QTY\|DESC\|UPC\|SSP\|PRICE\|DISC\|UNIT PRICE\|DEP\|EXT |
+| First live | `generic` / weak_detect · 10 lines · sum $240.86 · Vendor blank on sheet |
+| Forced post-registry | detect `southeast_beverage` @ 95–100 · **10** lines · **$240.86** · **0** MM · QA foot OK |
+| Money map | amount=EXT; cost=UNIT PRICE; qty=QTY; ssp=SSP (often OCR-blank on dense thermal) |
+| Sheet | first generic 10 rows + append clean 10 under **Southeast Beverage Co.** (append-only) |
+| Date checked | 2026-08-24 |
+
+### Anchors
+
+| item_code | qty | cost | amount | notes |
+|-----------|-----|------|--------|-------|
+| 11600 | 1 | 54.38 | 54.38 | Seventh Son THC (Beer $54.38) |
+| 80083 | 4 | 4.99 | 19.96 | ALP SPRINGS 24/16OZ |
+| 80086 | 1 | 9.60 | 9.60 | ALP SPRINGS 24/25OZ |
+| 91137 | 1 | 24.00 | 24.00 | Gorilla Mind |
+| — | 10 | — | **240.86** | Total Content / Invoice / check |
+
+---
