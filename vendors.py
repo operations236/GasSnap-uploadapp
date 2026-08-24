@@ -654,69 +654,105 @@ OTHER RULES:
         ),
         extract_rules="""
 VENDOR = 7UP Midvale (soft-drink DSD / bottler delivery ticket).
-Letterhead top: "7Up Midvale", 5554 Gundy Dr, Midvale, OH 44653, (740) 922-5253.
-Customer block is often a c-store name (e.g. EAGLE BP) — that is ship-to, NOT the vendor.
-Do not classify vendor as Eagle BP.
+Letterhead top/bottom: "7Up Midvale" / "7up Midvale", 5554 Gundy Dr, Midvale, OH 44653, (740) 922-5253.
+Carrier line may say SPLASH TRANSPORT, INC — still this vendor.
+Customer block is often a c-store name (e.g. EAGLE BP, 550 E STATE ST NEWCOMERSTOWN) — ship-to, NOT the vendor.
+Do not classify vendor as Eagle BP. Handwritten check payee "7-up" confirms vendor, not a product line.
 
-MULTIPAGE / MULTI-TICKET PDF (one tall scan often stacks two tickets):
-1. Scan the entire page top to bottom (sales ticket then damage/credit ticket).
-2. Extract product lines from SALES invoice AND DAMAGE / credit invoice when present.
-3. Multiple invoice numbers are normal (e.g. SALES 4012630832 + DAMAGE/ASSOC 4012630833).
+MULTIPAGE / MULTI-TICKET (tall thermal photo or PDF often stacks sections):
+1. Scan the ENTIRE ticket top→bottom: header, full SALES table, optional DAMAGE table, payment receipt.
+2. Extract EVERY product flavor/SKU under EVERY pack header on SALES and DAMAGE when present.
+3. Multiple invoice numbers are normal (SALES + DAMAGE/ASSOC). Single-invoice sales-only tickets are OK.
 4. notes: list all invoice numbers found.
-5. Skip COD notices, RECEIVED BY, legal NOTICE, signatures, handwritten check memos.
+5. Skip COD notices, RECEIVED BY, legal NOTICE, signatures, handwritten checks, PAYMENT RECEIPT stubs
+   (check $ may differ by cents from TOT SALE — do not use check as product foot).
 
 === SALES ticket layout ===
-Header: INVOICE <number>, DATE, TIME, ASSOC CREDIT/DEBIT INVOICE#.
+Header: INVOICE <number>, DATE, TIME, ASSOC CREDIT/DEBIT INVOICE# (if any).
 Customer: name + address + ACCOUNT #.
 Column band under "SALES":
   DESCRIPTION / WHSLE | CASES | SALES UNITS | UPC/SKU  NET | TAX | AMOUNT
 
-Product blocks are multi-line:
-  line A (pack header): e.g. "12 OZ ALUM CAN 12PK X 2", "16 OZ ALUM CAN LS 12", "67.6OZ/2L PLASTIC BTL PP149 LS 8"
-  line B (flavor/SKU): e.g. "12z12P SK Orange", "16z12GhstEn OrnCrm", UPC/SKU pair "078000113167/10000865"
-  line C (numbers): WHSLE, CASES, UNITS, NET, TAX, AMOUNT
-  optional PKG subtotal row — SKIP PKG rows (they repeat cases/units/amount only).
+Product blocks are multi-line pack GROUPS (critical — do not stop after first flavor):
+  line A (pack header): e.g. "20 OZ PLASTIC BTL LS 24", "16 OZ ALUM CAN LS 12",
+    "16 OZ ALUM CAN LS 12 PAL160", "12OZ/355ML ALUM CAN SLEEK LS 12",
+    "21OZ/621ML POLYPROPYLENE BTL LS 12", "67.6OZ/2L PLASTIC BTL PP149 LS 8"
+  lines B… (ONE OR MORE flavors): short code + flavor + UPC/SKU "078000052404/10001096"
+    each flavor has its own WHSLE, CASES, UNITS, NET, TAX, AMOUNT
+  line PKG: subtotal for that pack group only — SKIP as a product row, but USE as a checksum:
+    sum(flavor CASES) in the group should equal PKG CASES; sum(flavor AMOUNT) ≈ PKG AMOUNT.
+  Then the next pack header starts. Continue until TOT SALE.
 
-FIELD MAP (SALES product flavor lines only — one JSON object per flavor/SKU line):
-- upc = LEFT side of UPC/SKU before slash (barcode, keep leading zeros; e.g. 078000113167).
-- item_code = RIGHT side after slash (internal SKU; e.g. 10000865).
-- description = pack header + flavor text (e.g. "12 OZ ALUM CAN 12PK X 2 SK Orange").
-- pack_size = pack token from header (12PK X 2, LS 12, LS 24, LS 8, SLEEK LS 12, etc.).
-- qty_cases = CASES column (not SALES UNITS).
-- cost_per_pack = NET column (actual charged pack/case price). amount should equal CASES × NET.
-- ssp_per_pack = WHSLE column when printed (list/wholesale reference) — may differ from NET.
-- amount = AMOUNT column. Strip $.
-- Put source invoice number in notes or description only if needed; prefer notes listing invoice #s.
-- Do NOT invent UPC from account # or route #.
+COMPLETENESS (must-keep — prior misses wrong Ghost qty/NET or dropped flavors):
+- Emit one JSON object per flavor/SKU line, not one per pack header.
+- Dense packs (Ghost energy, Bloom, Sun Drop, Core Hydration, Electrolit, etc.) often have
+  2–7 flavors under one header — extract ALL of them before the PKG line.
+- PKG row = checksum only: sum(flavor CASES)=PKG CASES and sum(flavor AMOUNT)≈PKG AMOUNT.
+- Never merge two flavors into one row. Never put CASES×NET into the NET field
+  (if AMOUNT=82.64 and unit NET=20.66 then CASES=4 and cost_per_pack=20.66, not NET=41.32).
+- Prefer correct CASES on each printed flavor line over inventing duplicate SKU rows.
+  If the ticket shows one flavor with CASES 2, emit one object qty_cases=2 — do not split into two qty=1 copies.
+- ssp_per_pack = WHSLE list printed on the left (Ghost WHSLE ~35.90, Bloom ~31.00, A&W ~56.00).
+  Never put NET or CASES×NET into ssp_per_pack.
+- Prefer more product rows only when additional distinct flavors exist; never invent rows to force PKG math.
+- total_content / invoice_total = printed **TOT SALE** amount (or AMOUNT DUE when equal).
+  Validated Newcomerstown sales-only inv **4012228305** photo `20260824_150436_99fd482f9b`:
+  TOT SALE cases **31** / units **436** / amount **623.21** = AMOUNT DUE (check 623.31 ignore).
+  Ghost pack "16 OZ ALUM CAN LS 12" gold (3 flavors → PKG 7 / $144.62):
+    16z12GhstEn ElecLimd  CASES 1 NET 20.66 AMT 20.66  UPC/SKU 810085816898/10175089
+    16z12GhstEn WlchGrap  CASES 4 NET 20.66 AMT 82.64  UPC/SKU …/10174169
+    16z12GhstEn …Rbcd     CASES 2 NET 20.66 AMT 41.32  UPC/SKU 810085822694/10175283
+  Bloom SLEEK LS 12 PKG 5 / $110: CrspApl 1×22 + PearScr 3×22 + BlmSpkEn SmSpl 1×22.
+  Full ticket ≈ **20** product lines when no DAMAGE section.
 
-=== DAMAGE / credit ticket layout ===
-Header may say DAMAGE (not SALES). Columns often:
+FIELD MAP (SALES product flavor lines only):
+- upc = LEFT of UPC/SKU slash (barcode, keep leading zeros; 11–12 digits when printed).
+- item_code = RIGHT after slash (internal SKU, e.g. 10001096, 10175089).
+- description = pack header + flavor text.
+- pack_size = pack token from header (LS 12, LS 24, SLEEK LS 12, LS 8, 12PK X 2, PAL160, …).
+- qty_cases = **CASES** column (not SALES UNITS). CASES×NET must equal AMOUNT.
+- cost_per_pack = **NET** (charged). NEVER WHSLE as cost.
+- ssp_per_pack = **WHSLE** when printed (list/ref; often ~2× NET) — never into cost.
+- amount = AMOUNT. Strip $.
+- invoice_number = this ticket's Invoice# on each line when known (e.g. 4012228305).
+- Do NOT invent UPC from account # / route # / check #.
+
+=== DAMAGE / credit ticket layout (when stacked under SALES) ===
+Header may say DAMAGE. Columns often:
   DESCRIPTION | WHSLE | UNITS | PIECE | UPC/SKU NET | TAX | AMOUNT
-AMOUNT may be in parentheses meaning credit/return, e.g. (28.80).
-- Still one product object per damage SKU line.
-- qty_cases = UNITS or PIECE count as printed (damage is often unit-based).
-- cost_per_pack = NET; amount = signed extension (negative if parentheses/credit).
-- Same upc/item_code split on UPC/SKU.
+AMOUNT may be in parentheses = credit, e.g. (28.80).
+- One object per damage SKU; qty_cases = UNITS or PIECE; amount negative if parens.
+- Same upc/item_code slash split. Tag line invoice_number with damage inv # when different.
 
-SKIP entirely:
-- PKG subtotal lines
-- TOT SALE / TOT DMGD summary lines
-- AMOUNT DUE
-- PALLET PLASTIC / SHELL PLASTIC equipment lines (not sellable product)
-- COD-CHECK OR MONEY ORDER, RECEIVED BY, NOTICE blocks
+SKIP entirely (not product line_items):
+- PKG subtotal lines (use only as group checksum)
+- TOT SALE / TOT DMGD summary lines (do set total_content from TOT SALE amount)
+- AMOUNT DUE line itself
+- PALLET PLASTIC / SHELL PLASTIC / SHELL PET equipment counts
+- COD-CHECK OR MONEY ORDER, RECEIVED BY, NOTICE, PAYMENT RECEIPT, check images
 """.strip(),
         critical_rules=(
-            "VENDOR=7Up Midvale (Gundy Dr) — customer EAGLE BP is ship-to NOT vendor. "
-            "Scan full tall ticket: SALES invoice + DAMAGE/credit invoice if stacked. "
+            "VENDOR=7Up Midvale (Gundy Dr / Splash Transport) — EAGLE BP = ship-to NOT vendor. "
+            "Scan FULL tall ticket top→bottom; every pack header may have MANY flavors before PKG. "
+            "One JSON object per flavor/SKU (not per pack header). "
             "SALES cols: WHSLE|CASES|UNITS|UPC/SKU NET|TAX|AMOUNT. "
-            "upc=LEFT of UPC/SKU slash; item_code=RIGHT SKU; qty_cases=CASES not UNITS; "
-            "cost_per_pack=NET; ssp_per_pack=WHSLE; amount=AMOUNT (=CASES×NET). "
-            "One object per flavor/SKU line under pack headers; SKIP PKG subtotals, "
-            "TOT SALE/TOT DMGD, AMOUNT DUE, PALLET/SHELL lines, signatures. "
-            "DAMAGE: amount negative if (parens); qty from UNITS/PIECE. "
-            "notes list all invoice #s (e.g. 4012630832, 4012630833)."
+            "upc=LEFT of slash; item_code=RIGHT SKU; qty_cases=CASES not UNITS; "
+            "cost_per_pack=NET (never WHSLE; never CASES×NET stuffed into NET); "
+            "ssp_per_pack=WHSLE list (e.g. Ghost ~35.90) never NET or CASES×NET. amount=AMOUNT (=CASES×NET). "
+            "One row per printed flavor with its CASES — do not split one CASES=2 line into two qty=1 clones. "
+            "COMPLETENESS: sum(amount)≈TOT SALE/AMOUNT DUE (inv 4012228305 → $623.21 / 31 cases / ~20 lines). "
+            "Ghost LS12 example: 1+4+2 cases @ NET 20.66 = 20.66+82.64+41.32 (PKG 7/$144.62) — do not merge. "
+            "if short, re-read Ghost/Bloom/Electrolit/2L packs. "
+            "PKG rows = group checksum only — SKIP as products. "
+            "SKIP PALLET/SHELL, TOT SALE row-as-product, COD, signatures, payment receipt/check. "
+            "DAMAGE if present: negative amount if (parens); per-line invoice_number when dual inv. "
+            "total_content=TOT SALE amount; notes list invoice #s."
         ),
-        notes="Sample 20260728_030651_8d9c43069c.pdf Newcomerstown: sales 4012630832 $237.55 + damage 4012630833 ($28.80).",
+        notes=(
+            "Newcomerstown EAGLE BP: PDF 20260728_030651_8d9c43069c sales 4012630832 $237.55 + "
+            "damage 4012630833 ($28.80); photo 20260824_150436_99fd482f9b.jpeg inv 4012228305 "
+            "sales-only TOT SALE $623.21 / 31 cases (multi-flavor packs; check 623.31 ignore)."
+        ),
     ),
     VendorSpec(
         key="abarta_coke",

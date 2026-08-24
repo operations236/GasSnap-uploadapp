@@ -351,19 +351,29 @@ Live detect on sample → `esber` @ ~100.
 
 ## 7UP Midvale (reference)
 
-**Sample:** `uploads/20260728_030651_8d9c43069c.pdf` (Newcomerstown / EAGLE BP ship-to).  
+**Samples:**
+- PDF `uploads/20260728_030651_8d9c43069c.pdf` — Newcomerstown / EAGLE BP; sales **4012630832** $237.55 + damage **4012630833** (−$28.80) = net **$208.75**
+- Photo `uploads/20260824_150436_99fd482f9b.jpeg` — Newcomerstown / EAGLE BP; inv **4012228305** sales-only **TOT SALE $623.21 / 31 cases / ~20 lines** (check $623.31 ignore)
+
 **Registry key:** `seven_up`
 
 ### Structure
-Tall thermal PDF often stacks **SALES** then **DAMAGE** tickets.
-- Vendor: **7Up Midvale**, Gundy Dr — customer **EAGLE BP** is ship-to only.
+Tall thermal PDF/photo: **SALES** (required) then optional **DAMAGE**, then payment receipt.
+- Vendor: **7Up Midvale**, 5554 Gundy Dr / Splash Transport — customer **EAGLE BP** is ship-to only.
 - SALES: WHSLE | CASES | UNITS | UPC/SKU NET | TAX | AMOUNT
-- Multi-line pack header → flavor + `upc/sku` → numbers; skip **PKG** subtotals.
-- `upc` = left of slash; `item_code` = right SKU; `cost_per_pack` = NET; `ssp` = WHSLE; `qty_cases` = CASES.
+- Multi-line **pack groups**: pack header → **many** flavor lines → PKG subtotal (checksum only; skip as product).
+- `upc` = left of slash; `item_code` = right SKU; `cost_per_pack` = **NET**; `ssp` = **WHSLE**; `qty_cases` = **CASES**.
+- Never put CASES×NET into the NET field (Ghost CASES 4 × 20.66 = AMT 82.64 → cost stays 20.66).
 - DAMAGE: negative amount if parentheses; skip PALLET/SHELL lines.
+- Shared schema optional per-line `invoice_number` when sales+damage dual inv.
 
-### Sample totals
-Sales `4012630832` 10 lines **$237.55** + damage `4012630833` **−$28.80** = net **$208.75**.
+### Detection
+- Letterhead `7Up Midvale` / Gundy Dr / (740) 922-5253 / Splash Transport
+- Do **not** use bare city `midvale` or customer `EAGLE BP` as vendor aliases
+- Live Newcomerstown 2026-08-24: `seven_up` @ 95 detect+alias
+
+### Sample totals (2026-08-24)
+Inv **4012228305**: **20** product lines · sum **$623.21** · cases **31** · Ghost pack 1+4+2 @ NET 20.66 = $144.62 · QA foot OK after completeness harden.
 
 ---
 

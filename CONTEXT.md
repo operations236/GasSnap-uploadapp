@@ -26,7 +26,7 @@
 | `heidelberg` | **Production-ready** — Killbuck picksheet `20260727_013531_844932cf53` (RETAIL vs PRICE, wrap, short brand `99`) |
 | `red_bull` | **Production-ready** — Killbuck load sheet `20260727_011518_ec9b2466a3` |
 | `esber` | **Production-ready** — multipage PDF beer+wine `20260727_233821_9312ed9e4c` (15 lines, $654.95) |
-| `seven_up` | **Production-ready** — 7Up Midvale PDF `20260728_030651_8d9c43069c` sales+damage (11 lines, net $208.75) |
+| `seven_up` | **Production-ready** — Newcomerstown PDF sales+damage $208.75 + photo `20260824_150436_99fd482f9b` inv **4012228305** (20 lines, TOT SALE **$623.21** / 31 cases; multi-flavor packs; cost=NET) |
 | `abarta_coke` | **Production-ready** — ABARTA Coke PDF `20260728_195542_4926bd4c5b` Parma INV 5349998035 (36 lines, $1188.36) |
 | `beverage_distributors` | **Production-ready** — BDI Cleveland PDF `20260821_153032_ae66fc2717` Parma inv 787548 (28 lines, EXT $1220.64 / 48 cases; cost=NET) |
 | `rl_lipton` | **Production-ready** — Parma 443756/443755 + **ARCO** PDF `20260822_185810_49eed16da1` inv **443513** (18 lines, $454.35, Soft Drink 31; cost=PRICE−DISC; QA foot OK) |

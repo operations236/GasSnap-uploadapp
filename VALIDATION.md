@@ -405,6 +405,35 @@ PY
 
 No PKG / pallet / shell rows. First live pass was `generic`/EAGLE BP with 19 noisy rows — corrected via `replace_invoice_rows_for_store`.
 
+## 7UP Midvale — Newcomerstown photo `20260824_150436_99fd482f9b.jpeg`
+
+| Field | Value |
+|-------|--------|
+| File | `uploads/20260824_150436_99fd482f9b.jpeg` |
+| Store PIN | Newcomerstown |
+| Ship-to | EAGLE BP / 550 E State St Newcomerstown OH 43832 |
+| Detect | `seven_up` @ 95 (letterhead 7up Midvale + Gundy Dr — not Eagle) |
+| Invoice | **4012228305** · 08/24/26 · sales-only (no DAMAGE stack) |
+| Layout | SALES pack groups: header → many flavors → PKG checksum |
+| TOT SALE | cases **31** · units **436** · amount **$623.21** = AMOUNT DUE |
+| Check | $623.31 (payment receipt) — ignore for product foot |
+| Forced extract (post-harden) | **20** lines · sum **$623.21** · qty **31** · **0** MM · QA foot δ **0.00** |
+| Live first pass | 20 lines / sum **$427.03** · foot_mismatch (Ghost pack under-read) → Needs Review |
+| Money map | cost=**NET**; ssp=**WHSLE**; qty=**CASES**; upc left / SKU right of slash |
+| Sheet | first pass appended 20 incomplete rows on `Inv - Newcomerstown`; append clean 20 after harden (append-only) |
+| Date checked | 2026-08-24 |
+
+### Anchors (Ghost pack + foot)
+
+| item_code | qty | NET | amount | note |
+|-----------|-----|-----|--------|------|
+| 10175089 | 1 | 20.66 | 20.66 | Ghost ElecLimd |
+| 10174169 | 4 | 20.66 | 82.64 | Ghost WlchGrap — do not stuff NET=41.32 |
+| 10175283 | 2 | 20.66 | 41.32 | Ghost Red berry-ish |
+| 20042078 | 3 | 22.00 | 66.00 | Bloom PearScr |
+| 10161426 | 2 | 9.72 | 19.44 | 2L RC Cola |
+| (packet) | 31 | — | **623.21** | TOT SALE |
+
 ---
 
 ## ABARTA Coca-Cola — sample `20260728_195542_4926bd4c5b.pdf`
