@@ -311,15 +311,18 @@ Live detect on sample → `heidelberg` @ 100.
 
 ## Esber Beverage Company (reference)
 
-**Sample:** `uploads/20260727_233821_9312ed9e4c.pdf` (Killbuck multipage: check + beer 559759 + wine 559649).  
+**Samples:**
+- PDF `uploads/20260727_233821_9312ed9e4c.pdf` — Killbuck multipage check + beer **559759** + wine **559649** = **$654.95**
+- Photo `uploads/20260824_235655_c84021191d.jpeg` — Killbuck dual-sheet inv **564942** wine **$53.32** + beer **$392.37** = check **$445.69** (8 lines)
+
 **Registry key:** `esber`
 
 ### Structure
 
-Phone-scan PDFs often staple:
-1. Payment check (ignore for products)
-2. Beer/RTD ticket (red headers)
-3. Wine/spirits ticket (blue headers) — may be on same page as beer
+Phone-scan PDFs / table photos often stack:
+1. Payment check (ignore for products; foot cross-check only)
+2. Wine/spirits ticket (blue headers)
+3. Beer/RTD ticket (red headers) — may be a second sheet under the wine page
 
 **Beer (red):**
 ```
@@ -342,21 +345,22 @@ Wholesale Price Case | Price Bottle | LLC | Total
 | Size / desc pack token | `pack_size` |
 | Retail Price | `ssp_per_pack` (may be &lt; wholesale — not a swap) |
 | Price / WS Case / Price Bottle | `cost_per_pack` (beer Price; wine WS Case if case qty else Price Bottle) |
-| Ext Total / Total | `amount` |
+| Ext Total / Total | `amount` (= Case×Price; else cost=Ext/Case) |
 | LLC | ignore (not a sheet column) |
 
 ### Detection
 
 Aliases: `esber`, `esber beverage company`, Bolivar Rd / esberbeverage.com.  
-Live detect on sample → `esber` @ ~100.
+Live Killbuck dual-sheet 2026-08-24 → `esber` @ 95. Driver “ESPER” alone must not lock esber.
 
 ### Pitfalls
 
-1. **Multipage multi-invoice** — extract every product table; check total often = sum of invoice subtotals (435.45+219.50=654.95).  
+1. **Multi-sheet photo** — extract every wine+beer product table; packet foot = sum of sheet SUBTOTALS (53.32+392.37=445.69).  
 2. **Retail vs Price** — retail can be unit and/or less than wholesale; amount tracks Case×Price.  
 3. Wine bottle picks: qty = Bottle, cost = Price Bottle (not WS Case).  
 4. Skip EMPTY keg deposit rates and check pages.  
-5. First-pass beer-only extract: backfill wine invoice only (do not re-append beer).
+5. Same-row only — do not mix brand/desc across beer rows.  
+6. First-pass incomplete extract: append corrected full packet (do not delete old rows unless operator asks).
 
 ---
 

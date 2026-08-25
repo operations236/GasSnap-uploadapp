@@ -409,6 +409,33 @@ print([i["item_code"] for i in r["line_items"]])
 PY
 ```
 
+## Esber Beverage — Killbuck dual-sheet photo `20260824_235655_c84021191d.jpeg`
+
+| Field | Value |
+|-------|--------|
+| File | `uploads/20260824_235655_c84021191d.jpeg` |
+| Store PIN | **Killbuck** · ship-to VET RETAIL OPS / 205 W FRONT ST |
+| Detect | `esber` @ 95 (Esber Beverage Company letterhead) |
+| Invoice | **564942** (wine blue page + beer red page + check) |
+| First live | 6 lines · sum **$288.54** · foot_mismatch δ 157.15 · high_line_review_rate (missed High Life; row mix) |
+| Forced post-harden | **8** lines · sum **$445.69** · **0** MM · QA foot OK |
+| Packet | wine SUBTOTAL **53.32** + beer SUBTOTAL **392.37** = check **445.69** |
+| Sheet | first 6 NR rows + append clean **8** (append-only) |
+| Date checked | 2026-08-24 |
+
+### Anchors (564942)
+
+| item_code | qty | cost | amount | description |
+|-----------|-----|------|--------|-------------|
+| 20966 | 1 | 53.32 | 53.32 | FRANZIA CHILLABLE RED 5L (wine) |
+| 11 | 7 | 18.39 | 128.73 | HIGH LIFE 30PK CAN |
+| 51 | 2 | 19.19 | 38.38 | MILLER LITE SUITCASE C24 |
+| 70 | 1 | 15.99 | 15.99 | MILLER LITE 16OZ 15PK |
+| 254 | 2 | 12.43 | 24.86 | ICEHOUSE 24OZ C12 |
+| 267 | 3 | 12.43 | 37.29 | EDGE 24OZ C12 |
+| 364 | 2 | 28.78 | 57.56 | HEINEKEN 2/12PK NR |
+| 1067 | 4 | 22.39 | 89.56 | MILLER LITE C12 |
+
 ---
 
 ## 7UP Midvale — sample `20260728_030651_8d9c43069c.pdf`

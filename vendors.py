@@ -582,31 +582,39 @@ phone 330-456-4361, www.esberbeverage.com. Customer copy invoices are common.
 Do not choose esber from driver/salesman names that merely look like "Esper" / "D. ESPER".
 Vendor requires Esber Beverage Company letterhead, Bolivar Road, or esberbeverage.com.
 
-MULTIPAGE / MULTI-INVOICE PDF (critical — phone scans often staple several docs):
-1. Scan EVERY page of the document.
-2. IGNORE payment CHECKs, paystubs, deposit slips, photo-of-check pages (no product table).
-3. Extract EVERY product table on EVERY invoice page. Multiple invoice numbers in one PDF
-   are normal (e.g. beer inv 559759 + wine inv 559649 paid by one check).
-4. Prefer MORE product rows over stopping after the first table. Never stop after beer
-   if a wine/spirits table appears later on the same page or another page.
-5. In notes, list all invoice numbers found (e.g. "invoices: 559759, 559649").
-6. Handwritten circled check totals (e.g. $654.95) are payment memos — not a reason to
-   skip a second invoice; often check = sum of all invoice subtotals.
+MULTIPAGE / MULTI-TICKET / PHOTO-OF-STACK (critical):
+1. Scan EVERY page of a PDF AND every invoice sheet visible in a photo (wine page + beer page
+   stacked on a table is common).
+2. IGNORE payment CHECKs, paystubs, deposit slips (no product table) — still use check $ only
+   as a packet foot cross-check when invoice subtotals match.
+3. Extract EVERY product table on EVERY invoice page/sheet. Multiple invoice numbers OR
+   one invoice number split across wine (blue) + beer (red) pages are both normal
+   (e.g. beer 559759 + wine 559649; or single inv 564942 wine $53.32 + beer $392.37 = $445.69).
+4. Prefer MORE product rows over stopping after the first table. Never stop after wine
+   if a beer table appears below/beside it (or vice versa).
+5. In notes, list all invoice numbers and per-page subtotals found.
+6. Handwritten circled totals (e.g. $445.69) and check amount often = sum of all invoice
+   SUBTOTALS — product sum(amount) must hit that packet total when both sheets are present.
+7. Per-line invoice_number = that sheet's Invoice # when two sheets differ; same # when one.
 
 === LAYOUT A — BEER / RTD (often RED column headers) ===
   UPC | Prod# | Case | Kegs | Description | Retail Price | Price | Dep | Ext Total
 
 FIELD MAP A:
 - upc = UPC (keep leading zeros).
-- item_code = Prod#.
+- item_code = Prod# (short codes OK: 11, 51, 70, 254, 267, 364, 1067).
 - qty_cases = Case (case count). Kegs only if Case empty and Kegs has qty.
-- description = Description; pack_size from desc (30PK, C24, 9PK, 15PK, C12, 24OZ).
+- description = Description on THE SAME ROW only — never borrow a neighbor row's brand.
+- pack_size from desc (30PK, C24, 9PK, 15PK, C12, 24OZ, 2/12PK NR).
 - ssp_per_pack = Retail Price. May be pack OR unit retail (e.g. 1.29 on 24oz).
-  Retail may be LESS than Price (e.g. 14.99 retail / 23.99 wholesale on 9PK) — still map
-  Retail→ssp and Price→cost; do NOT swap; trust Ext Total = Case × Price.
+  Retail may be LESS than Price (e.g. 14.99 retail / 23.99 wholesale) — still map
+  Retail→ssp and Price→cost; do NOT swap.
 - cost_per_pack = Price (wholesale). NEVER put Retail Price here.
-- amount = Ext Total (= Case × Price when both clear).
-- Ignore Dep. Skip EMPTY 1/2 KEG / EMPTY 1/4 KEG footer rate lines.
+- amount = Ext Total. When Case and Price are clear, Ext MUST = Case × Price
+  (e.g. 7×18.39=128.73, 2×19.19=38.38, 1×15.99=15.99, 2×12.43=24.86, 3×12.43=37.29,
+   2×28.78=57.56, 4×22.39=89.56). If OCR conflicts, trust Ext and set cost = Ext/Case.
+
+SKIP beer footer: EMPTY 1/2 KEG / EMPTY 1/4 KEG rate lines (Prod# 575/576 style).
 
 === LAYOUT B — WINE / SPIRITS (often BLUE column headers) ===
   UPC | Prod# | Case | Bottle | Size | Description | Retail Price |
@@ -625,29 +633,38 @@ FIELD MAP B:
 - amount = Total column (line extension). Case lines: often = Case × WS Case.
   Bottle lines: often = Bottle × Price Bottle (e.g. 6 × 6.66 = 42.96).
 - LLC = Ohio liquor/tax-style fee column — NOT a shared sheet field. Ignore LLC for
-  cost/ssp/amount (do not add LLC into amount unless Total already includes it —
-  use printed Total as amount).
+  cost/ssp/amount (use printed Total as amount).
+
+VALIDATED dual-sheet photo (Killbuck 20260824_235655_c84021191d, inv 564942):
+Wine (blue): 1 line FRANZIA 5L Case1 WS 53.32 Total 53.32.
+Beer (red): 7 lines — High Life 30PK×7 Ext 128.73; Lite suitcase×2 Ext 38.38;
+Lite 15PK×1 Ext 15.99; Icehouse 24oz×2 Ext 24.86; Edge 24oz×3 Ext 37.29;
+Heineken 2/12×2 Ext 57.56; Lite C12×4 Ext 89.56. Beer subtotal 392.37.
+Packet foot = 53.32 + 392.37 = **445.69** = check. Must emit **8** product rows.
 
 OTHER RULES:
-- Extract beer AND wine/spirits product Prod# rows from the same PDF.
-- Skip TAX, SUBTOTAL, TOTAL, CREDITS, Case/Bottle footer counts, signatures, logos.
+- Extract beer AND wine/spirits product Prod# rows from the same PDF/photo.
+- Skip TAX, SUBTOTAL, TOTAL, CREDITS, Case/Bottle/Keg footer counts, signatures, logos.
 - ship_to_* = customer block (VET RETAIL OPS / store address), not Esber Canton letterhead.
 - One JSON object per product Prod# row (across all invoice pages/tables).
 """.strip(),
         critical_rules=(
-            "MULTIPAGE: scan EVERY page; IGNORE checks/paystubs only; "
-            "extract EVERY product table on EVERY invoice page; multiple invoice #s OK; "
-            "prefer more product rows — do not stop after first table; "
-            "notes list all invoice #s found. "
+            "MULTI-SHEET PHOTO/PDF: scan EVERY wine+beer page; IGNORE checks only; "
+            "extract EVERY product table; never stop after first sheet; "
+            "packet foot = sum of sheet SUBTOTALS (e.g. inv 564942 wine 53.32 + beer 392.37 = 445.69 / 8 lines). "
             "BEER(red): UPC|Prod#|Case|Kegs|Desc|Retail|Price|Dep|ExtTotal → "
-            "upc,item_code,qty=Case,ssp=Retail,cost=Price,amount=ExtTotal. "
-            "Retail may be < Price — still Retail→ssp Price→cost; trust Case×Price=Ext. "
+            "upc,item_code,qty=Case,ssp=Retail,cost=Price,amount=ExtTotal; "
+            "same-row only; Case×Price must = Ext (else cost=Ext/Case). "
             "WINE(blue): UPC|Prod#|Case|Bottle|Size|Desc|Retail|WS Case|Price Bottle|LLC|Total → "
             "qty=Case else Bottle; pack_size=Size; ssp=Retail; "
-            "cost=WS Case if Case qty else Price Bottle; amount=Total; IGNORE LLC in cost/ssp. "
+            "cost=WS Case if Case qty else Price Bottle; amount=Total; IGNORE LLC. "
             "SKIP: EMPTY keg rates, TAX/SUBTOTAL/TOTAL/CREDITS, signatures, check pages."
         ),
-        notes="Sample 20260727_233821_9312ed9e4c.pdf: beer 559759 (9@$435.45) + wine 559649 (6@$219.50); check $654.95.",
+        notes=(
+            "PDF 20260727_233821_9312ed9e4c beer 559759 ($435.45) + wine 559649 ($219.50) check $654.95; "
+            "Killbuck dual-sheet photo 20260824_235655_c84021191d inv 564942 "
+            "wine $53.32 + beer $392.37 = check $445.69 (8 lines)."
+        ),
     ),
     VendorSpec(
         key="seven_up",

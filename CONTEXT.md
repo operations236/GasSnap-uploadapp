@@ -25,7 +25,7 @@
 | `superior_beverage` | **Production-ready** — Glenwillow + Akron + Parma 3749614 + **Killbuck PDF** `20260822_031623_ec39b6eebc` inv **3754642** (74 lines, $3485.12; multipage check+invoice; cost=NET) |
 | `heidelberg` | **Production-ready** — Killbuck picksheet `20260727_013531_844932cf53` (RETAIL vs PRICE, wrap, short brand `99`) |
 | `red_bull` | **Production-ready** — Killbuck fractional load sheet + **Loudonville** photo `20260824_180544_7bb9a02bb7` inv **2037214470** (4 lines, TOTAL DUE **$183.79**; case PRICE−DISC) |
-| `esber` | **Production-ready** — multipage PDF beer+wine `20260727_233821_9312ed9e4c` (15 lines, $654.95) |
+| `esber` | **Production-ready** — multipage PDF beer+wine $654.95 + **Killbuck dual-sheet photo** `20260824_235655_c84021191d` inv **564942** (wine $53.32 + beer $392.37 = check **$445.69** / 8 lines) |
 | `seven_up` | **Production-ready** — Newcomerstown PDF sales+damage $208.75 + photo `20260824_150436_99fd482f9b` inv **4012228305** (20 lines, TOT SALE **$623.21** / 31 cases; multi-flavor packs; cost=NET) |
 | `abarta_coke` | **Production-ready** — ABARTA Coke PDF `20260728_195542_4926bd4c5b` Parma INV 5349998035 (36 lines, $1188.36) |
 | `beverage_distributors` | **Production-ready** — BDI Cleveland PDF `20260821_153032_ae66fc2717` Parma inv 787548 (28 lines, EXT $1220.64 / 48 cases; cost=NET) |
