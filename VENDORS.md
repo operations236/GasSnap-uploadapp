@@ -687,10 +687,11 @@ Not ship-to Killbuck / driver. Live detect after registry → `mansfield` @ 100.
 ### Pitfalls
 
 1. cost=NET not PRICE (DISC per case already in NET).  
-2. Foot **Total Content** not pre-discount Total Sales.  
-3. Tall ticket completeness (~35–40 lines); first live incomplete.  
-4. BREAKAGE notes under rows — prefer main QTY/EXT; don’t invent bare breakage rows.  
-5. Gemini may need a second pass on dense tall tickets — verify foot before append.
+2. Foot **Total Content** not pre-discount Total Sales (2411.54 ≠ gold).  
+3. Tall ticket: drop/merge/hallucinate lines — must hit **38** ITEM# gold set; often drop 00453/03125.  
+4. BREAKAGE notes under rows — prefer main QTY/EXT; don’t invent bare breakage rows or phantom ITEM#s.  
+5. Wrong-line traps: 01325 EXT must be 79.06; 06212 EXT 124.74; 03125 qty **2**.  
+6. Verify foot **$2288.27** before trusting a single extract; 3× reproducibility is the production bar.
 
 ---
 

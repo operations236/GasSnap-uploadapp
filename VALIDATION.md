@@ -777,19 +777,36 @@ Future extract gate: all 10 ssp_per_pack filled + 0 MM + foot $240.86. Do not tr
 | Invoice | **3552801** · 2026-08-26 · COD |
 | Layout | ITEM#\|QTY\|DESC\|UPC\|SSP\|PRICE\|DISC\|NET\|EXT |
 | First live | `generic` · 35 lines · sum **$1968.44** · foot_mismatch vs **$2288.27** · high NR |
-| Forced post-registry | detect `mansfield` @ 100 · **38** lines · sum **$2288.27** · **0** MM · QA foot OK (retry OK) |
+| Gold | **38** product lines · sum **$2288.27** exactly · cost=NET |
+| 3× forced extract (post-harden) | each run 38 / $2288.27 / 0 MM / full ITEM# set / anchors OK |
 | Money map | amount=EXT; cost=**NET**; ssp=SSP; qty=QTY |
 | Totals | Total Sales 2411.54 − Disc 123.27 = Content/Invoice/check **2288.27** |
-| Sheet | first generic incomplete + append clean under **Mansfield Distributing** |
+| Sheet | first generic incomplete + append clean under **Mansfield Distributing** (append-only) |
 | Date checked | 2026-08-26 |
 
-### Anchors
+### Gold ITEM# list (38, once each, no phantoms)
+
+```
+70049, 70059, 00111, 00112, 00118, 00135, 00211, 00212, 00218, 00225, 00235,
+00453, 01325, 02511, 02518, 03107, 03109, 03111, 03113, 03115, 03125, 03131,
+04501, 04507, 04513, 04525, 04753, 05911, 05919, 06211, 06212, 06225, 06236,
+17125, 50011, 50018, 79617, 115005
+```
+
+### Key anchors
 
 | item_code | qty | NET | EXT | notes |
 |-----------|-----|-----|-----|-------|
 | 70049 | 1 | 40.00 | 40.00 | Surf Lem |
-| 70059 | 3 | 42.75 | 128.25 | Superlyte |
-| 00111 | 2 | 22.39 | 44.78 | Bud 2/12 |
-| 00135 | 1 | **26.68** (not list 31.00) | 26.68 | Bud 24/16 |
+| 70059 | 3 | 42.75 | 128.25 | Superlyte NET not list |
+| 00111 | 2 | 22.39 | 44.78 | |
+| 00135 | 1 | **26.68** | 26.68 | not list 31.00 |
+| 00453 | 1 | 15.96 | 15.96 | often dropped |
+| 01325 | 2 | 39.53 | **79.06** | not collapsed 15.96 |
+| 03107 | 14 | 18.39 | **257.46** | BREAKAGE note under row |
+| 03125 | 2 | 23.93 | 47.86 | often dropped; never qty1+EXT47.86 |
+| 06212 | 6 | 20.79 | **124.74** | not 175.14 |
+
+Production-ready **locked** after 3 consecutive green extracts (2026-08-26 harden). Tall-ticket still warrants foot check on live uploads.
 
 ---
