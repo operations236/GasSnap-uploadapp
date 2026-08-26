@@ -17,7 +17,7 @@ import os
 import re
 import threading
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 from zoneinfo import ZoneInfo
@@ -286,20 +286,126 @@ def _product_id_for_sheet(upc: str, item_code: str) -> str:
     if c:
         return c
     return u
-
-
 def _parse_money(value: Any) -> Optional[Decimal]:
-    """Parse money-ish OCR strings; None if empty/unparseable."""
-    s = str(value or "").strip()
+    if value is None:
+        return None
+    s = str(value).strip()
     if not s:
         return None
-    s = s.replace("$", "").replace(",", "").replace(" ", "")
+    s = s.replace("$", "").replace(",", "").strip()
+    # parentheses negatives
     if s.startswith("(") and s.endswith(")"):
-        s = "-" + s[1:-1]
+        s = "-" + s[1:-1].strip()
     try:
         return Decimal(s)
     except (InvalidOperation, ValueError):
         return None
+
+
+def _sum_line_amounts(items: List[Dict[str, Any]]) -> Decimal:
+    total = Decimal("0")
+    for it in items:
+        a = _parse_money(it.get("amount"))
+        if a is not None:
+            total += a
+    return total
+
+
+def _reconcile_qty_cost_amount(items: List[Dict[str, Any]]) -> None:
+    """
+    Shared money-row repair when qty×cost≠amount (tall tickets often misread QTY).
+    Prefer integer qty from amount/cost; else net cost from amount/qty.
+    """
+    for it in items:
+        q = _parse_money(it.get("qty_cases"))
+        c = _parse_money(it.get("cost_per_pack"))
+        a = _parse_money(it.get("amount"))
+        if q is None or c is None or a is None:
+            continue
+        if abs(q * c - a) < Decimal("0.02"):
+            continue
+        if c != 0:
+            implied = (a / c).quantize(Decimal("0.0001"))
+            nearest = implied.to_integral_value(rounding=ROUND_HALF_UP)
+            if nearest > 0 and abs(implied - nearest) < Decimal("0.02"):
+                if abs(nearest * c - a) < Decimal("0.02"):
+                    it["qty_cases"] = str(int(nearest))
+                    continue
+        if q != 0:
+            net = (a / q).quantize(Decimal("0.01"))
+            if abs(q * net - a) < Decimal("0.02"):
+                it["cost_per_pack"] = f"{net}"
+
+
+def _apply_vendor_item_fixes(vendor: Any, items: List[Dict[str, Any]]) -> None:
+    """Deterministic per-vendor line cleanup after Gemini normalize."""
+    if vendor.key == "abarta_coke":
+        for it in items:
+            it["ssp_per_pack"] = ""
+            it["ssp_per_unit"] = ""
+    if vendor.key == "rl_lipton":
+        for it in items:
+            pack = str(it.get("ssp_per_pack") or "").strip()
+            unit = str(it.get("ssp_per_unit") or "").strip()
+            if not pack and unit:
+                it["ssp_per_pack"] = unit
+    if vendor.key == "red_bull":
+        for it in items:
+            q = _parse_money(str(it.get("qty_cases") or ""))
+            c = _parse_money(str(it.get("cost_per_pack") or ""))
+            a = _parse_money(str(it.get("amount") or ""))
+            if q is not None and c is not None and a is not None and q != 0:
+                if abs(q * c - a) >= Decimal("0.02"):
+                    if c > abs(a / q) and abs(a) > 0:
+                        net = (a / q).quantize(Decimal("0.01"))
+                        it["cost_per_pack"] = f"{net}"
+                        conf_i = int(it.get("confidence") or 0)
+                        needs = conf_i < LOW_CONFIDENCE_THRESHOLD
+                        if not str(it.get("item_code") or "").strip():
+                            needs = True
+                        if abs(q * net - a) >= Decimal("0.02"):
+                            needs = True
+                        it["needs_review"] = needs
+            units_s = str(it.get("units") or it.get("calculated_qty") or "").strip()
+            if units_s.startswith("(") and units_s.endswith(")"):
+                units_s = units_s[1:-1].strip()
+            if units_s:
+                it["units"] = units_s
+                it["calculated_qty"] = units_s
+                q_int = None
+                try:
+                    qf = float(str(it.get("qty_cases") or "").strip() or "nan")
+                    if qf == qf and qf > 0 and abs(qf - round(qf)) < 1e-9:
+                        q_int = int(round(qf))
+                except (TypeError, ValueError):
+                    q_int = None
+                u_val = _parse_money(units_s)
+                if q_int and q_int > 0 and u_val is not None:
+                    per = (u_val / Decimal(q_int)).quantize(Decimal("1"))
+                    if per == per.to_integral_value():
+                        it["extracted_qty"] = str(int(per))
+                    else:
+                        it["extracted_qty"] = f"{per}"
+            else:
+                if (
+                    str(it.get("item_code") or "").strip()
+                    or str(it.get("amount") or "").strip()
+                ):
+                    it["needs_review"] = True
+    if vendor.key == "southeast_beverage":
+        for it in items:
+            pack = str(it.get("ssp_per_pack") or "").strip()
+            unit = str(it.get("ssp_per_unit") or "").strip()
+            if not pack and unit:
+                it["ssp_per_pack"] = unit
+                pack = unit
+            if not pack and (
+                str(it.get("cost_per_pack") or "").strip()
+                or str(it.get("amount") or "").strip()
+                or str(it.get("item_code") or "").strip()
+            ):
+                it["needs_review"] = True
+    _reconcile_qty_cost_amount(items)
 
 
 def _foot_target_from_extraction(extraction: Mapping[str, Any]) -> Optional[Decimal]:
@@ -621,115 +727,73 @@ def extract_invoice_line_items(
     vendor = vendor_registry.get_vendor(detection.get("vendor_key"))
     media_bytes, mime = _read_media(path)
 
-    prompts = [
-        vendor_registry.build_extract_prompt(
-            vendor,
-            invoice_number=invoice_number,
-            invoice_date=invoice_date,
-            vendor_hint=vendor_hint,
-            printed_name=str(detection.get("vendor_name_printed") or ""),
-        ),
-        vendor_registry.build_compact_extract_prompt(vendor),
-    ]
+    full_prompt = vendor_registry.build_extract_prompt(
+        vendor,
+        invoice_number=invoice_number,
+        invoice_date=invoice_date,
+        vendor_hint=vendor_hint,
+        printed_name=str(detection.get("vendor_name_printed") or ""),
+    )
+    compact_prompt = vendor_registry.build_compact_extract_prompt(vendor)
+    # Full → compact → full again when foot fails (tall tickets drop money lines).
+    prompts = [full_prompt, compact_prompt, full_prompt]
 
     try:
         last_err: Optional[str] = None
         data: Optional[Dict[str, Any]] = None
+        items: List[Dict[str, Any]] = []
+        best: Optional[tuple] = None  # (score, data, items)
         for i, prompt in enumerate(prompts):
             try:
-                data = _gemini_json(
+                cand = _gemini_json(
                     media_bytes,
                     mime,
                     prompt,
                     label=f"extract[{vendor.key}]#{i + 1}",
                 )
-                break
             except Exception as e:
                 last_err = str(e)
                 logger.warning("OCR: extract attempt %d (%s) failed: %s", i + 1, vendor.key, e)
-                data = None
-        if data is None:
+                continue
+            cand_items = _normalize_line_items(cand)
+            _apply_vendor_item_fixes(vendor, cand_items)
+            sm = _sum_line_amounts(cand_items)
+            ft = _foot_target_from_extraction(cand)
+            if ft is not None and ft > 0:
+                delta = abs(sm - ft)
+            else:
+                # No foot target — still accept; prefer larger line count when comparing
+                delta = Decimal("999999")
+            score = (delta, -len(cand_items))
+            if best is None or score < best[0]:
+                best = (score, cand, cand_items)
+            if ft is not None and ft > 0 and delta <= OCR_QA_FOOT_TOLERANCE:
+                logger.info(
+                    "OCR: foot ok attempt=%d vendor=%s n=%d sum=%s target=%s delta=%s",
+                    i + 1,
+                    vendor.key,
+                    len(cand_items),
+                    sm,
+                    ft,
+                    delta,
+                )
+                break
+            if i + 1 < len(prompts) and ft is not None and ft > 0:
+                logger.warning(
+                    "OCR: foot retry vendor=%s attempt=%d n=%d sum=%s target=%s delta=%s",
+                    vendor.key,
+                    i + 1,
+                    len(cand_items),
+                    sm,
+                    ft,
+                    delta,
+                )
+        if best is None:
             raise RuntimeError(last_err or "Gemini extract failed")
+        data = best[1]
+        items = best[2]
+        assert data is not None
 
-        items = _normalize_line_items(data)
-        # ABARTA PRICE is list wholesale, not shelf SSP — never put it in ssp columns.
-        if vendor.key == "abarta_coke":
-            for it in items:
-                it["ssp_per_pack"] = ""
-                it["ssp_per_unit"] = ""
-        # Lipton often puts unit shelf S.S. in ssp_per_unit; sheet uses ssp_per_pack.
-        if vendor.key == "rl_lipton":
-            for it in items:
-                pack = str(it.get("ssp_per_pack") or "").strip()
-                unit = str(it.get("ssp_per_unit") or "").strip()
-                if not pack and unit:
-                    it["ssp_per_pack"] = unit
-        # Red Bull case tickets: list PRICE with DISC → TOTAL is net. If model left cost=list
-        # PRICE while qty×cost≠amount, prefer amount/qty (or amount when qty=1).
-        if vendor.key == "red_bull":
-            for it in items:
-                q = _parse_money(str(it.get("qty_cases") or ""))
-                c = _parse_money(str(it.get("cost_per_pack") or ""))
-                a = _parse_money(str(it.get("amount") or ""))
-                if q is not None and c is not None and a is not None and q != 0:
-                    if abs(q * c - a) >= Decimal("0.02"):
-                        # Only correct when cost looks like list > net extension (DISC case layout)
-                        if c > abs(a / q) and abs(a) > 0:
-                            net = (a / q).quantize(Decimal("0.01"))
-                            it["cost_per_pack"] = f"{net}"
-                            conf_i = int(it.get("confidence") or 0)
-                            needs = conf_i < LOW_CONFIDENCE_THRESHOLD
-                            if not str(it.get("item_code") or "").strip():
-                                needs = True
-                            if abs(q * net - a) >= Decimal("0.02"):
-                                needs = True
-                            it["needs_review"] = needs
-                # UNITS → Calculated Qty (operator gold on Loudonville 2037214470).
-                units_s = str(it.get("units") or it.get("calculated_qty") or "").strip()
-                # Strip parens if model copied "(24)"
-                if units_s.startswith("(") and units_s.endswith(")"):
-                    units_s = units_s[1:-1].strip()
-                if units_s:
-                    it["units"] = units_s
-                    it["calculated_qty"] = units_s
-                    # Extracted Qty = units per case when QTY is whole cases
-                    q_int = None
-                    try:
-                        qf = float(str(it.get("qty_cases") or "").strip() or "nan")
-                        if qf == qf and qf > 0 and abs(qf - round(qf)) < 1e-9:
-                            q_int = int(round(qf))
-                    except (TypeError, ValueError):
-                        q_int = None
-                    u_val = _parse_money(units_s)
-                    if q_int and q_int > 0 and u_val is not None:
-                        per = (u_val / Decimal(q_int)).quantize(Decimal("1"))
-                        # Prefer integer units-per-case when clean
-                        if per == per.to_integral_value():
-                            it["extracted_qty"] = str(int(per))
-                        else:
-                            it["extracted_qty"] = f"{per}"
-                else:
-                    # UNITS missing on a product line → review (money alone is incomplete for RB)
-                    if (
-                        str(it.get("item_code") or "").strip()
-                        or str(it.get("amount") or "").strip()
-                    ):
-                        it["needs_review"] = True
-        # Southeast prints SSP on every product row; blank SSP is incomplete OCR (operator had to hand-fill).
-        if vendor.key == "southeast_beverage":
-            for it in items:
-                pack = str(it.get("ssp_per_pack") or "").strip()
-                unit = str(it.get("ssp_per_unit") or "").strip()
-                # Promote unit→pack first (sheets use ssp_per_pack only).
-                if not pack and unit:
-                    it["ssp_per_pack"] = unit
-                    pack = unit
-                if not pack and (
-                    str(it.get("cost_per_pack") or "").strip()
-                    or str(it.get("amount") or "").strip()
-                    or str(it.get("item_code") or "").strip()
-                ):
-                    it["needs_review"] = True
         try:
             overall = int(data.get("overall_confidence") or 0)
         except (TypeError, ValueError):

@@ -807,6 +807,6 @@ Future extract gate: all 10 ssp_per_pack filled + 0 MM + foot $240.86. Do not tr
 | 03125 | 2 | 23.93 | 47.86 | often dropped; never qty1+EXT47.86 |
 | 06212 | 6 | 20.79 | **124.74** | not 175.14 |
 
-Production-ready **locked** after 3 consecutive green extracts (2026-08-26 harden). Tall-ticket still warrants foot check on live uploads.
+Production-ready **locked** after 3 consecutive green extracts (2026-08-26 harden). Tall-ticket still warrants foot check on live uploads. Shared `ocr.py` foot-retry (full→compact→full) + qty-from-EXT reconcile helps when a single pass drops money.
 
 ---
