@@ -643,8 +643,54 @@ See `vendors.list_vendors()` or `/health` → `ocr.vendors`:
 - `rl_lipton`
 - `southeast_beverage` — **Production-ready** (Newcomerstown 162891 $240.86)
 - `matesich` — **Production-ready** (Newcomerstown 624530+624531 / $2229.35 packet)
+- `mansfield` — **Production-ready** (Killbuck 3552801 / $2288.27)
 - `coremark`
 - `generic` (fallback)
+
+---
+
+## Mansfield Distributing (reference)
+
+**Sample:** `uploads/20260826_183001_c95ef6b993.jpeg` (Killbuck Marathon).  
+**Registry key:** `mansfield` (operator may type “Mainsfield”)
+
+### Structure
+
+```
+MANSFIELD DISTRIBUTING
+1245 LONGVIEW AVENUE  MANSFIELD, OH 44906  (419) 747-4777
+Customer: VET RETAIL OPS / MARATHON KILLBUCK  ← ship-to
+
+ITEM# QTY DESCRIPTION  UPC  SSP  PRICE  DISC  NET  EXT
+70049 1 SURF LEM VAR …  24.99 40.00 0.00 40.00 40.00
+00135 1 BUD 24/16 …     1.39  31.00 4.32 26.68 26.68
+…
+Total Sales 2411.54 − Total Discount 123.27 = Total Content/Invoice **2288.27** (= check)
+```
+
+### Schema mapping
+
+| Ticket | JSON / sheet |
+|--------|----------------|
+| ITEM# | `item_code` |
+| UPC | `upc` |
+| QTY | `qty_cases` |
+| SSP | `ssp_per_pack` |
+| **NET** | `cost_per_pack` (never list PRICE when NET present) |
+| EXT | `amount` |
+
+### Detection
+
+Aliases: mansfield, mainsfield (typo), Longview Ave, (419) 747-4777.  
+Not ship-to Killbuck / driver. Live detect after registry → `mansfield` @ 100.
+
+### Pitfalls
+
+1. cost=NET not PRICE (DISC per case already in NET).  
+2. Foot **Total Content** not pre-discount Total Sales.  
+3. Tall ticket completeness (~35–40 lines); first live incomplete.  
+4. BREAKAGE notes under rows — prefer main QTY/EXT; don’t invent bare breakage rows.  
+5. Gemini may need a second pass on dense tall tickets — verify foot before append.
 
 ---
 

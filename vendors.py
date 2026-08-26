@@ -1255,6 +1255,87 @@ One JSON object per product ITEM# row only.
             "handwritten $2229.35 = sum; first live generic; cost=NET."
         ),
     ),
+    VendorSpec(
+        key="mansfield",
+        display_name="Mansfield Distributing",
+        aliases=(
+            "mansfield",
+            "mansfield distributing",
+            "mansfield distributing co",
+            "mansfield distributing company",
+            # OCR / operator spellings
+            "mainsfield",
+            "mainsfield distributing",
+            "longview avenue",
+            "1245 longview",
+            "(419) 747-4777",
+            "419-747-4777",
+        ),
+        detect_labels=(
+            "mansfield",
+            "mansfield distributing",
+            "mansfield distributing co",
+        ),
+        extract_rules="""
+VENDOR = Mansfield Distributing (Mansfield OH beer / RTD DSD).
+Letterhead: "MANSFIELD DISTRIBUTING", 1245 LONGVIEW AVENUE, MANSFIELD, OH 44906,
+(419) 747-4777. Operator may type "Mainsfield" — still this vendor.
+Customer / ship-to (VET RETAIL OPS / MARATHON KILLBUCK / 205 W FRONT) is NOT the vendor.
+Driver / salesrep (e.g. TYLER NEWLAN, DARRELL MCRAE) are NOT the vendor.
+Check payee "Mansfield Distributing" confirms vendor.
+
+COLUMN LAYOUT (left → right) — tall thermal final invoice:
+  ITEM# | QTY | DESCRIPTION | UPC | SSP | PRICE | DISC | NET | EXT
+Pack size often wraps under DESCRIPTION (2/12 CN, 24 SUITCASE, 30 PACK CN, 3/8 12 OZ CAN, …).
+
+FIELD MAPPING (critical):
+- item_code = ITEM# with leading zeros (00111, 70049, 03107).
+- upc = UPC column (keep leading zeros; 11–13 digits). Always capture both ITEM# and UPC.
+- description = brand/flavor on the product row; pack_size from desc/wrap lines.
+- qty_cases = **QTY**. Handwritten checkmarks next to QTY are confirmation only.
+- ssp_per_pack = **SSP**. NEVER into cost.
+- cost_per_pack = **NET** (paid case). When DISC > 0, NET = PRICE − DISC (per case).
+  Never leave cost = list PRICE when NET is printed (e.g. PRICE 31.00 DISC 4.32 NET 26.68).
+  If NET blank: cost = PRICE − DISC when DISC > 0 else PRICE.
+- amount = **EXT** (= QTY × NET when clear).
+
+BREAKAGE / CREDIT lines:
+- A "-1 BREAKAGE" note under a product may be a separate credit row or already baked into QTY.
+  Prefer printed QTY/EXT on the main product row. If a distinct BREAKAGE line has its own ITEM#/EXT, emit it with negative amount only when clearly a credit extension.
+  Do not invent extra rows for bare "BREAKAGE" text without money.
+
+COMPLETENESS + FOOT:
+- Extract EVERY product ITEM# row top→bottom until Cases/Bottles/Kegs footer.
+- Dense tall tickets (30–40 lines) are normal — do not stop mid-ticket.
+- Foot sum(amount) ≈ **Total Content** / **Invoice Total** / payment Cash
+  (validated Killbuck inv **3552801**: Total Sales 2411.54 − Total Discount 123.27 =
+  Total Content = Invoice Total = check **$2288.27**).
+- Total Discount footer is summary of line DISC already in NET/EXT — do not subtract again from product sum.
+
+SKIP (not products):
+- Cases / Bottles / Kegs / Misc / Credits count block
+- Total Sales, Total Discount, Total Content, Total Deposit, Total Credits, Invoice Total labels
+- PAYMENT / PAYMENT TOTALS / TOTAL CASH/CHECK blocks, signatures, check image
+- OVER-30 / CURRENT aging header fields alone
+
+One JSON object per product ITEM# row only.
+""".strip(),
+        critical_rules=(
+            "VENDOR=Mansfield Distributing (1245 Longview Ave Mansfield OH / 419-747-4777) — "
+            "Killbuck ship-to / driver NOT vendor. "
+            "COLS: ITEM#|QTY|DESC|UPC|SSP|PRICE|DISC|NET|EXT. "
+            "item_code=ITEM#; upc=UPC; qty_cases=QTY; ssp=SSP never cost; "
+            "cost_per_pack=NET (PRICE−DISC when DISC>0) — never list PRICE when NET present; "
+            "amount=EXT (=QTY×NET). "
+            "COMPLETENESS: every line on tall ticket (inv 3552801 → ~35+ lines / foot $2288.27). "
+            "Foot sum≈Total Content/Invoice Total (not Total Sales before discount). "
+            "SKIP: Cases counts, Total Sales/Discount/Content/Invoice Total labels, PAYMENT blocks, check."
+        ),
+        notes=(
+            "Killbuck photo 20260826_183001_c95ef6b993.jpeg inv 3552801: "
+            "Total Content/Invoice/check $2288.27; first live generic incomplete foot; cost=NET."
+        ),
+    ),
     # Non-beer wholesalers still hit c-stores — keep generic rules strong
     VendorSpec(
         key="coremark",

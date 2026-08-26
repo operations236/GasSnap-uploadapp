@@ -32,6 +32,7 @@
 | `rl_lipton` | **Production-ready** — Parma 443756/443755 + **ARCO** PDF `20260822_185810_49eed16da1` inv **443513** (18 lines, $454.35, Soft Drink 31; cost=PRICE−DISC; QA foot OK) |
 | `southeast_beverage` | **Production-ready** — Newcomerstown EAGLE BP photo `20260824_233516_46e8959b51` inv **162891** (10 lines, **$240.86**; cost=UNIT PRICE; **SSP required** — operator gold on sheet; empty ssp→NR) |
 | `matesich` | **Production-ready** — Newcomerstown Duchess dual picksheets `20260826_142154_68d26bcd38` inv **624530** (25/$2033.70) + `20260826_142319_2fabd190b2` inv **624531** (4/$195.65); packet handwritten **$2229.35**; cost=NET |
+| `mansfield` | **Production-ready** — Killbuck photo `20260826_183001_c95ef6b993` inv **3552801** (~38 lines, Total Content/Invoice/check **$2288.27**; cost=NET; first live generic incomplete) |
 | `coremark` | Registered |
 | `generic` | Fallback |
 

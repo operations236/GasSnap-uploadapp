@@ -766,3 +766,30 @@ Future extract gate: all 10 ssp_per_pack filled + 0 MM + foot $240.86. Do not tr
 | 207640 | 2 | **42.75** (not list 45.00) | 85.50 |
 
 ---
+
+## Mansfield Distributing — Killbuck photo `20260826_183001_c95ef6b993.jpeg`
+
+| Field | Value |
+|-------|--------|
+| File | `uploads/20260826_183001_c95ef6b993.jpeg` |
+| Store PIN | **Killbuck** · ship-to Marathon Killbuck / VET RETAIL OPS |
+| Letterhead | MANSFIELD DISTRIBUTING · 1245 Longview Ave · Mansfield OH · (419) 747-4777 |
+| Invoice | **3552801** · 2026-08-26 · COD |
+| Layout | ITEM#\|QTY\|DESC\|UPC\|SSP\|PRICE\|DISC\|NET\|EXT |
+| First live | `generic` · 35 lines · sum **$1968.44** · foot_mismatch vs **$2288.27** · high NR |
+| Forced post-registry | detect `mansfield` @ 100 · **38** lines · sum **$2288.27** · **0** MM · QA foot OK (retry OK) |
+| Money map | amount=EXT; cost=**NET**; ssp=SSP; qty=QTY |
+| Totals | Total Sales 2411.54 − Disc 123.27 = Content/Invoice/check **2288.27** |
+| Sheet | first generic incomplete + append clean under **Mansfield Distributing** |
+| Date checked | 2026-08-26 |
+
+### Anchors
+
+| item_code | qty | NET | EXT | notes |
+|-----------|-----|-----|-----|-------|
+| 70049 | 1 | 40.00 | 40.00 | Surf Lem |
+| 70059 | 3 | 42.75 | 128.25 | Superlyte |
+| 00111 | 2 | 22.39 | 44.78 | Bud 2/12 |
+| 00135 | 1 | **26.68** (not list 31.00) | 26.68 | Bud 24/16 |
+
+---
