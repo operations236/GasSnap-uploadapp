@@ -544,10 +544,13 @@ Total Content / Invoice Total 240.86
 | U.P.C. | `upc` |
 | QTY | `qty_cases` |
 | pack token in DESCRIPTION | `pack_size` (4/6CN, 24/16OZ NR, …) |
-| SSP | `ssp_per_pack` (soft OCR — model may blank; money still foots) |
+| **SSP** (after UPC, before PRICE) | `ssp_per_pack` — **required**; small shelf $ (0.89–12.99) |
 | UNIT PRICE (or PRICE−DISC) | `cost_per_pack` |
 | EXT | `amount` |
 | DEP | unmapped |
+
+After UPC the money band is always **SSP | PRICE | DISC | UNIT PRICE | DEP | EXT**.  
+First OCR passes foots money but dropped SSP entirely — operator filled **SSP per Pack** on `Inv - Newcomerstown` inv **162891**; those values are gold anchors in `VendorSpec` (see VALIDATION.md). Empty ssp → line `needs_review` in pipeline.
 
 ### Detection
 
@@ -557,14 +560,16 @@ Do **not** alias EAGLE BP / driver names. Live detect after registry → `southe
 ### Sample totals (2026-08-24 Newcomerstown)
 
 Inv **162891** (user typed 162892 — prefer printed): **10** lines · sum EXT **$240.86** = Total Content = Invoice Total = check.  
-Beer $54.38 + Soft Drink $186.48. 0 MM after `southeast_beverage` extract. First live pass was `generic` / weak_detect.
+Beer $54.38 + Soft Drink $186.48. 0 MM. Operator SSP gold: 12.99, 5.99, 0.89, 2.89, 2.89, 2.99, 3.99, 3.99, 0.99, 0.99.
 
 ### Pitfalls
 
 1. Ship-to EAGLE BP is not the vendor.  
-2. cost = UNIT PRICE (net case), not SSP.  
-3. Skip category Beer/Soft Drink $ summaries and Selling Units Total.  
-4. Prefer printed Invoice# over operator one-digit typo.
+2. cost = UNIT PRICE (net case), not SSP; SSP is **not** optional on this layout.  
+3. Do not stop after reading UNIT/EXT — SSP is the first money field after UPC.  
+4. Skip category Beer/Soft Drink $ summaries and Selling Units Total.  
+5. Prefer printed Invoice# over operator one-digit typo.  
+6. Manual sheet SSP corrections are training signal — keep anchors in rules; do not hardcode SSP by UPC in Python (next ticket prices differ).
 
 ---
 

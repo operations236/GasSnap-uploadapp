@@ -695,21 +695,31 @@ PY
 | Ship-to | EAGLE BP / NEW CUMBERLAND OH 43832 |
 | Letterhead | SOUTHEAST BEVERAGE CO. · P.O. BOX 180 · ATHENS OH 45701 · (740) 593-3353 |
 | Invoice | printed **162891** (user typed 162892 — prefer printed) |
-| Layout | ITEM#\|QTY\|DESC\|UPC\|SSP\|PRICE\|DISC\|UNIT PRICE\|DEP\|EXT |
-| First live | `generic` / weak_detect · 10 lines · sum $240.86 · Vendor blank on sheet |
-| Forced post-registry | detect `southeast_beverage` @ 95–100 · **10** lines · **$240.86** · **0** MM · QA foot OK |
-| Money map | amount=EXT; cost=UNIT PRICE; qty=QTY; ssp=SSP (often OCR-blank on dense thermal) |
-| Sheet | first generic 10 rows + append clean 10 under **Southeast Beverage Co.** (append-only) |
-| Date checked | 2026-08-24 |
+| Layout | ITEM#\|QTY\|DESC\|UPC\|**SSP**\|PRICE\|DISC\|UNIT PRICE\|DEP\|EXT |
+| First live | `generic` / weak_detect · 10 lines · sum $240.86 · **SSP blank** · Vendor generic |
+| Clean append | Vendor **Southeast Beverage Co.** inv **162891** · costs/amounts OK · **SSP still blank from OCR** |
+| Operator gold | Manual **SSP per Pack** on inv 162891 sheet rows (2026-08-25) — matches ticket; locked into VendorSpec anchors |
+| Pipeline harden | extract_rules + critical_rules SSP column geometry + gold table; empty ssp → `needs_review` for `southeast_beverage` |
+| Money map | amount=EXT; cost=**UNIT PRICE**; qty=QTY; ssp=**SSP** (required; small shelf $ left of PRICE) |
+| Sheet | generic 10 (162892 NR) + Southeast 10 (162891) append-only — keep operator SSP on 162891 |
+| Date checked | 2026-08-24; SSP operator-verify 2026-08-25 |
 
-### Anchors
+### Anchors (cost + **operator SSP**)
 
-| item_code | qty | cost | amount | notes |
-|-----------|-----|------|--------|-------|
-| 11600 | 1 | 54.38 | 54.38 | Seventh Son THC (Beer $54.38) |
-| 80083 | 4 | 4.99 | 19.96 | ALP SPRINGS 24/16OZ |
-| 80086 | 1 | 9.60 | 9.60 | ALP SPRINGS 24/25OZ |
-| 91137 | 1 | 24.00 | 24.00 | Gorilla Mind |
-| — | 10 | — | **240.86** | Total Content / Invoice / check |
+| item_code | UPC | qty | **SSP** | cost UNIT | amount |
+|-----------|-----|-----|---------|-----------|--------|
+| 11600 | 858439006380 | 1 | **12.99** | 54.38 | 54.38 |
+| 80083 | 075140245147 | 4 | **5.99** | 4.99 | 19.96 |
+| 80086 | 075140707027 | 1 | **0.89** | 9.60 | 9.60 |
+| 81064 | 850031700260 | 1 | **2.89** | 21.57 | 21.57 |
+| 81120 | 840442200893 | 1 | **2.89** | 21.57 | 21.57 |
+| 91137 | 810113512884 | 1 | **2.99** | 24.00 | 24.00 |
+| 80003 | 883990661006 | 1 | **3.99** | 31.40 | 31.40 |
+| 80004 | 883990651205 | 1 | **3.99** | 31.40 | 31.40 |
+| 80023 | 074806001615 | 1 | **0.99** | 13.49 | 13.49 |
+| 80024 | 074806001622 | 1 | **0.99** | 13.49 | 13.49 |
+| (packet) | — | — | — | — | **240.86** |
+
+Future extract gate: all 10 ssp_per_pack filled + 0 MM + foot $240.86. Do not treat money-only foot as complete for this vendor.
 
 ---

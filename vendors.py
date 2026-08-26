@@ -1077,22 +1077,45 @@ COLUMN LAYOUT (left → right) — thermal delivery ticket:
   ITEM# | QTY | DESCRIPTION | U.P.C. | SSP | PRICE | DISC | UNIT PRICE | DEP | EXT
 Pack size often sits in the DESCRIPTION (e.g. 4/6CN, 24/16OZ NR, 12/19.2OZ, 12/6OZ NR).
 
+Money columns are dense on one thermal line under/ beside the UPC. Order after U.P.C. is always:
+  **SSP → PRICE → DISC → UNIT PRICE → DEP → EXT** (left → right). Do not skip SSP.
+
 FIELD MAPPING (critical):
 - item_code = ITEM# (full digits, e.g. 11600, 80083, 91137).
 - upc = U.P.C. barcode under/near description (keep leading zeros). Always capture both when both print.
 - description = brand/flavor words; pack_size = trailing pack token from description
   (4/6CN, 24/16OZ NR, 24/25OZ NR, 12/19.2OZ, 12/16OZ, 12/6OZ NR, 24/16OZ NR, …).
 - qty_cases = **QTY** (cases). Never use Selling Units Total or pack “24/…” as qty.
-- ssp_per_pack = **SSP** (shelf / suggested). NEVER put SSP into cost.
+- ssp_per_pack = **SSP** column (shelf / suggested retail). REQUIRED on every product row when printed.
+  SSP is usually a **small unit shelf** number (often 0.89–12.99), **left of** list PRICE.
+  How to find it: after UPC digits, the first money field is SSP, then PRICE (case list), then DISC,
+  then UNIT PRICE (case net = cost), then DEP, then EXT.
+  NEVER leave ssp_per_pack empty when any of PRICE / UNIT PRICE / EXT is readable on that row.
+  NEVER put SSP into cost. NEVER put UNIT PRICE or PRICE into ssp_per_pack.
+  ssp_per_unit: leave empty (SSP on this ticket is already the shelf/unit-style figure → ssp_per_pack only).
 - cost_per_pack = **UNIT PRICE** when printed (net case cost after discount).
   If UNIT PRICE blank: cost = PRICE − DISC when DISC > 0, else PRICE.
   Never put SSP into cost. Never put DEP into cost.
 - amount = **EXT** (extension). Must equal QTY × cost when clear (e.g. 4 × 4.99 = 19.96).
-- cost_per_unit / ssp_per_unit: leave empty unless explicitly per-unit.
+- cost_per_unit: leave empty unless explicitly per-unit.
 - DEP is deposit (usually 0.00) — unmapped.
+
+SSP GOLD ANCHORS (operator-verified Inv - Newcomerstown inv **162891** / photo 20260824_233516_46e8959b51):
+  ITEM# 11600 UPC 858439006380 → ssp 12.99 | cost UNIT 54.38 | EXT 54.38
+  ITEM# 80083 UPC 075140245147 → ssp 5.99  | cost 4.99 × QTY 4 = EXT 19.96
+  ITEM# 80086 UPC 075140707027 → ssp 0.89  | cost 9.60 | EXT 9.60
+  ITEM# 81064 UPC 850031700260 → ssp 2.89  | cost 21.57 | EXT 21.57
+  ITEM# 81120 UPC 840442200893 → ssp 2.89  | cost 21.57 | EXT 21.57
+  ITEM# 91137 UPC 810113512884 → ssp 2.99  | cost 24.00 | EXT 24.00
+  ITEM# 80003 UPC 883990661006 → ssp 3.99  | cost 31.40 | EXT 31.40
+  ITEM# 80004 UPC 883990651205 → ssp 3.99  | cost 31.40 | EXT 31.40
+  ITEM# 80023 UPC 074806001615 → ssp 0.99  | cost 13.49 | EXT 13.49
+  ITEM# 80024 UPC 074806001622 → ssp 0.99  | cost 13.49 | EXT 13.49
+Use these as the pattern for reading SSP on every future Southeast row (same column geometry).
 
 COMPLETENESS + FOOT:
 - Extract every ITEM# product row top→bottom until category footers (Beer / Soft Drink / …).
+- Every product row must include ssp_per_pack when the SSP column prints (failing that is incomplete).
 - Foot sum(amount) ≈ **Total Content** / **Total Sales** / **Invoice Total**
   (validated Newcomerstown sample inv **162891**: 10 lines, Total Content = Invoice Total = check **$240.86**;
    Beer $54.38 + Soft Drink $186.48 = $240.86).
@@ -1111,18 +1134,21 @@ One JSON object per product ITEM# row only.
         critical_rules=(
             "VENDOR=Southeast Beverage Co. (Athens OH P.O. Box 180 / (740)593-3353) — "
             "EAGLE BP / ship-to / driver NOT vendor. "
-            "COLS: ITEM#|QTY|DESC|UPC|SSP|PRICE|DISC|UNIT PRICE|DEP|EXT. "
+            "COLS after UPC (L→R): SSP | PRICE | DISC | UNIT PRICE | DEP | EXT — never skip SSP. "
             "item_code=ITEM#; upc=U.P.C.; qty_cases=QTY not units/pack digits; "
-            "ALWAYS fill ssp_per_pack from SSP column (e.g. 12.99, 5.99, 2.89, 0.99) — never leave blank when printed; "
-            "ssp never goes into cost; cost_per_pack=UNIT PRICE (or PRICE−DISC if UNIT blank); "
-            "amount=EXT (=QTY×cost). pack_size from desc (4/6CN, 24/16OZ NR, 12/19.2OZ…). "
-            "Foot sum≈Total Content/Invoice Total (e.g. inv 162891 → $240.86 / 10 lines). "
+            "ssp_per_pack=SSP REQUIRED (small shelf $ left of PRICE, e.g. 12.99/5.99/0.89/2.89/2.99/3.99/0.99) — "
+            "never blank when PRICE/UNIT/EXT readable; never put UNIT/PRICE into ssp; ssp never into cost; "
+            "cost_per_pack=UNIT PRICE (or PRICE−DISC if UNIT blank); amount=EXT (=QTY×cost). "
+            "Gold inv 162891: 11600 ssp12.99; 80083 ssp5.99; 80086 ssp0.89; 81064/81120 ssp2.89; "
+            "91137 ssp2.99; 80003/80004 ssp3.99; 80023/80024 ssp0.99; foot $240.86 / 10 lines. "
+            "pack_size from desc (4/6CN, 24/16OZ NR, 12/19.2OZ…). "
             "SKIP: Beer/Soft Drink category $ rows, Selling Units Total, Total Sales/Content/Deposit/Invoice Total, signatures."
         ),
         notes=(
             "Newcomerstown EAGLE BP photo 20260824_233516_46e8959b51.jpeg "
             "inv 162891 (user typed 162892): 10 lines, Total Content/Invoice/check $240.86; "
-            "cols SSP|PRICE|DISC|UNIT PRICE|DEP|EXT; cost=UNIT PRICE; first live pass generic."
+            "cost=UNIT PRICE; SSP operator-verified on Inv sheet (was blank on first OCR) — "
+            "anchors in extract_rules; empty ssp → needs_review."
         ),
     ),
     # Non-beer wholesalers still hit c-stores — keep generic rules strong

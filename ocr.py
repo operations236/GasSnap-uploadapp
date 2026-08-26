@@ -642,6 +642,22 @@ def extract_invoice_line_items(
                     if abs(q * net - a) >= Decimal("0.02"):
                         needs = True
                     it["needs_review"] = needs
+        # Southeast prints SSP on every product row; blank SSP is incomplete OCR (operator had to hand-fill).
+        if vendor.key == "southeast_beverage":
+            for it in items:
+                ssp = str(it.get("ssp_per_pack") or it.get("ssp_per_unit") or "").strip()
+                if not ssp:
+                    # If model stuffed shelf SSP into unit only, promote (same as Lipton pattern).
+                    unit = str(it.get("ssp_per_unit") or "").strip()
+                    if unit:
+                        it["ssp_per_pack"] = unit
+                        ssp = unit
+                if not ssp and (
+                    str(it.get("cost_per_pack") or "").strip()
+                    or str(it.get("amount") or "").strip()
+                    or str(it.get("item_code") or "").strip()
+                ):
+                    it["needs_review"] = True
         try:
             overall = int(data.get("overall_confidence") or 0)
         except (TypeError, ValueError):
