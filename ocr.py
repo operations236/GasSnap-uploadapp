@@ -645,14 +645,13 @@ def extract_invoice_line_items(
         # Southeast prints SSP on every product row; blank SSP is incomplete OCR (operator had to hand-fill).
         if vendor.key == "southeast_beverage":
             for it in items:
-                ssp = str(it.get("ssp_per_pack") or it.get("ssp_per_unit") or "").strip()
-                if not ssp:
-                    # If model stuffed shelf SSP into unit only, promote (same as Lipton pattern).
-                    unit = str(it.get("ssp_per_unit") or "").strip()
-                    if unit:
-                        it["ssp_per_pack"] = unit
-                        ssp = unit
-                if not ssp and (
+                pack = str(it.get("ssp_per_pack") or "").strip()
+                unit = str(it.get("ssp_per_unit") or "").strip()
+                # Promote unit→pack first (sheets use ssp_per_pack only).
+                if not pack and unit:
+                    it["ssp_per_pack"] = unit
+                    pack = unit
+                if not pack and (
                     str(it.get("cost_per_pack") or "").strip()
                     or str(it.get("amount") or "").strip()
                     or str(it.get("item_code") or "").strip()
