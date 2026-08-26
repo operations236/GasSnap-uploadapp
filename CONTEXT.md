@@ -28,7 +28,7 @@
 | `esber` | **Production-ready** — multipage PDF beer+wine $654.95 + **Killbuck dual-sheet photo** `20260824_235655_c84021191d` inv **564942** (wine $53.32 + beer $392.37 = check **$445.69** / 8 lines) |
 | `seven_up` | **Production-ready** — Newcomerstown PDF sales+damage $208.75 + photo `20260824_150436_99fd482f9b` inv **4012228305** (20 lines, TOT SALE **$623.21** / 31 cases; multi-flavor packs; cost=NET) |
 | `abarta_coke` | **Production-ready** — ABARTA Coke PDF `20260728_195542_4926bd4c5b` Parma INV 5349998035 (36 lines, $1188.36) |
-| `beverage_distributors` | **Production-ready** — BDI Cleveland PDF `20260821_153032_ae66fc2717` Parma inv 787548 (28 lines, EXT $1220.64 / 48 cases; cost=NET) |
+| `beverage_distributors` | **Production-ready** — BDI Cleveland PDF `20260821_153032_ae66fc2717` Parma inv 787548 (28 lines, EXT $1220.64 / 48 cases; cost=NET; **11→12 UPC-A** check digit) |
 | `rl_lipton` | **Production-ready** — Parma 443756/443755 + **ARCO** PDF `20260822_185810_49eed16da1` inv **443513** (18 lines, $454.35, Soft Drink 31; cost=PRICE−DISC; QA foot OK) |
 | `southeast_beverage` | **Production-ready** — Newcomerstown EAGLE BP photo `20260824_233516_46e8959b51` inv **162891** (10 lines, **$240.86**; cost=UNIT PRICE; **SSP required** — operator gold on sheet; empty ssp→NR) |
 | `coremark` | Registered |

@@ -936,7 +936,16 @@ COLUMN LAYOUT (left → right) under dashed header:
 
 FIELD MAPPING (critical — do not swap money columns):
 - item_code = ITEM# (5 digits common, keep leading zeros: 00119, 00241).
-- upc = UPC column barcode digits (often 11–12; keep leading zeros). Never put ITEM# in upc.
+- upc = UPC column barcode digits. BDI often prints **11 digits** (no check digit).
+  Capture every printed digit with leading zeros. Never put ITEM# in upc.
+  Prefer full 12-digit UPC-A when the ticket shows 12; if only 11 print, still return those
+  11 digits faithfully (pipeline appends UPC-A check digit for sheet/PDi match).
+  Operator gold (Parma inv **787548** first lines — 11 on ticket → 12 with check digit):
+    00119 LITE 12PK CN 16OZ → ticket 03410057653 → sheet **034100576530**
+    00241 LITE 12PK CN      → ticket 03410057636 → sheet **034100576363**
+    00244 LITE 24PK CN      → ticket 03410057306 → sheet **034100573065**
+    00134 MHL 12PK NR       → ticket 03410001509 → sheet **034100015091**
+  Same 12-digit forms appear on Killbuck/ARCO/other vendors — do not drop the last digit.
 - qty_cases = QTY (cases).
 - description = DESCRIPTION brand/flavor words.
 - pack_size = pack token from description (12PK CN, 24PK CN, 6NR, 12NR, 30PK CN, 240Z CN,
@@ -962,15 +971,18 @@ OTHER RULES:
             "VENDOR=Beverage Distributors Inc (3800 King Ave Cleveland) — store/ship-to NOT vendor. "
             "MULTIPAGE: IGNORE check/pay pages; extract ITEM# table pages only. "
             "COLS: ITEM#|QTY|DESC|UPC|SSP|PRICE|DISC|DEP|NET|EXT. "
-            "item_code=ITEM# (leading zeros); upc=UPC barcode; qty_cases=QTY; "
-            "ssp_per_pack=SSP; cost_per_pack=NET (after DISC) — NEVER PRICE when NET present; "
+            "item_code=ITEM# (leading zeros); upc=UPC barcode ALL digits (BDI often 11-digit body); "
+            "NEVER ITEM# in upc; gold 00119→03410057653, 00241→03410057636, 00244→03410057306, "
+            "00134→03410001509 (pipeline adds UPC-A check digit → …0/…3/…5/…1). "
+            "qty_cases=QTY; ssp_per_pack=SSP; cost_per_pack=NET (after DISC) — NEVER PRICE when NET present; "
             "amount=EXT (=QTY×NET). DISC/DEP unmapped. "
             "WRAP: continuation under same ITEM# → same row pack/desc. "
             "SKIP: Cases/Bottles/Kegs footers, check pages, signatures."
         ),
         notes=(
             "Sample 20260821_153032_ae66fc2717.pdf Parma inv 787548: "
-            "check $1238.70 + invoice 28 lines / 48 cases (NET cost, EXT=QTY×NET)."
+            "check $1238.70 + invoice 28 lines / 48 cases (NET cost, EXT=QTY×NET); "
+            "UPC often 11-digit on ticket — normalize to 12-digit UPC-A (operator gold first 4 lines)."
         ),
     ),
     VendorSpec(

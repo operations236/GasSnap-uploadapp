@@ -448,7 +448,7 @@ ITEM# | QTY | DESCRIPTION | UPC | SSP | PRICE | DISC | DEP | NET | EXT
 | Ticket | JSON / sheet |
 |--------|----------------|
 | ITEM# | `item_code` (leading zeros) |
-| UPC | `upc` |
+| UPC | `upc` — BDI often **11 digits** on ticket; pipeline normalizes to **12-digit UPC-A** (check digit). Gold first lines inv 787548: 034100576530 / 576363 / 573065 / 015091 |
 | QTY | `qty_cases` |
 | DESCRIPTION (+ wrap) | `description` + `pack_size` |
 | SSP | `ssp_per_pack` |

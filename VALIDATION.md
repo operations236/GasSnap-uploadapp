@@ -579,6 +579,19 @@ Patch: `BUILDER_PATCH_detect_aliases.md` applied to `vendors.py` + `ocr.py`.
 | 01017 | 2 | 28.79 | 17.99 | 57.58 | White Claw |
 | 02401 | 1 | 28.46 | 2.96 | 28.46 | last line |
 
+### UPC length (operator fix 2026-08-26)
+
+BDI ticket prints **11-digit** UPC bodies (no check digit). PDi / Item Pack Master / other vendor rows use **12-digit UPC-A**. Operator corrected first lines on Parma to 12-digit forms; pipeline now appends UPC-A check digit whenever OCR returns 11 digits.
+
+| item_code | ticket UPC (11) | sheet UPC (12) | also seen on |
+|-----------|-----------------|----------------|--------------|
+| 00119 LITE 12PK CN 16OZ | 03410057653 | **034100576530** | ARCO Tramonte LITE |
+| 00241 LITE 12PK CN | 03410057636 | **034100576363** | Killbuck Esber MILLER LITE C12 |
+| 00244 LITE 24PK CN | 03410057306 | **034100573065** | Killbuck MILLER LITE SUITCASE |
+| 00134 MHL 12PK NR | 03410001509 | **034100015091** | Parma 784078 manual |
+
+Also e.g. ICE EDGE ticket `03410000768` → `034100007683` (Killbuck EDGE 24OZ).
+
 Ship-to: PEARL&BRADLEY SUNOCO / EAGLE STORE #85 / 5385 Pearl Rd — matches PIN Parma.
 
 ```bash

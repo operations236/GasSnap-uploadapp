@@ -255,12 +255,32 @@ def _looks_like_upc(value: str) -> bool:
     return len(digits) in (11, 12, 13, 14)
 
 
+def _upc_a_check_digit(d11: str) -> str:
+    """UPC-A check digit for an 11-digit body (GS1)."""
+    s = sum(int(d11[i]) * (3 if i % 2 == 0 else 1) for i in range(11))
+    return str((10 - (s % 10)) % 10)
+
+
+def _normalize_upc_digits(value: str) -> str:
+    """
+    Normalize barcode digits for sheet/PDi match.
+
+    BDI (and some thermals) print 11-digit UPC bodies without the check digit.
+    Item Pack Master / other vendors use full 12-digit UPC-A. Append check digit
+    when we have exactly 11 digits. Leave 12/13/14 as-is (digits only).
+    """
+    digits = re.sub(r"\D", "", value or "")
+    if len(digits) == 11:
+        return digits + _upc_a_check_digit(digits)
+    return digits
+
+
 def _product_id_for_sheet(upc: str, item_code: str) -> str:
     """Sheet 'UPC' column: prefer true UPC/EAN, else vendor ITEM#."""
     u = (upc or "").strip()
     c = (item_code or "").strip()
     if u and _looks_like_upc(u):
-        return re.sub(r"\D", "", u)
+        return _normalize_upc_digits(u)
     if u and not c:
         return u
     if c:
