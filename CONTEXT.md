@@ -31,6 +31,7 @@
 | `beverage_distributors` | **Production-ready** — BDI Cleveland PDF `20260821_153032_ae66fc2717` Parma inv 787548 (28 lines, EXT $1220.64 / 48 cases; cost=NET; **11→12 UPC-A** check digit) |
 | `rl_lipton` | **Production-ready** — Parma 443756/443755 + **ARCO** PDF `20260822_185810_49eed16da1` inv **443513** (18 lines, $454.35, Soft Drink 31; cost=PRICE−DISC; QA foot OK) |
 | `southeast_beverage` | **Production-ready** — Newcomerstown EAGLE BP photo `20260824_233516_46e8959b51` inv **162891** (10 lines, **$240.86**; cost=UNIT PRICE; **SSP required** — operator gold on sheet; empty ssp→NR) |
+| `matesich` | **Production-ready** — Newcomerstown Duchess dual picksheets `20260826_142154_68d26bcd38` inv **624530** (25/$2033.70) + `20260826_142319_2fabd190b2` inv **624531** (4/$195.65); packet handwritten **$2229.35**; cost=NET |
 | `coremark` | Registered |
 | `generic` | Fallback |
 

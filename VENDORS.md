@@ -577,6 +577,54 @@ Beer $54.38 + Soft Drink $186.48. 0 MM. Operator SSP gold: 12.99, 5.99, 0.89, 2.
 
 ---
 
+## Matesich Distributing Co. (reference)
+
+**Samples (Newcomerstown / Duchess 1220):**
+- Beer picksheet `uploads/20260826_142154_68d26bcd38.jpeg` — inv **624530**, **25** lines, Picksheet Total **$2033.70**
+- RTD picksheet `uploads/20260826_142319_2fabd190b2.jpeg` — inv **624531**, **4** lines, Picksheet Total **$195.65**
+- Handwritten **$2229.35** on tall ticket = 2033.70 + 195.65 (two picksheets, one payment)
+
+**Registry key:** `matesich`
+
+### Structure
+
+```
+MATESICH DISTRIBUTING CO.     [banner: NOT A FINAL INVOICE — still extract]
+Customer: ENGLEFIELD INC / DUCHESS 1220 NEWCOMERSTOWN  ← ship-to
+
+ITEM#  QTY  DESCRIPTION           SSP   PRICE  DISC  NET   AMOUNT
+00133  7    B LT CAN TL 12PK12OZ  13.99 23.99  1.60  22.39 156.73
+207640 2    SUPERLYTE C3/8 …      17.99 45.00  2.25  42.75  85.50
+…
+Cases: N   Total Sales / Picksheet Total
+```
+
+### Schema mapping
+
+| Ticket | JSON / sheet |
+|--------|----------------|
+| ITEM# | `item_code` (keep leading zeros) |
+| true barcode digits if any | `upc` (else empty; sheet uses item_code) |
+| QTY | `qty_cases` |
+| pack token in DESCRIPTION | `pack_size` |
+| SSP | `ssp_per_pack` |
+| **NET** (or PRICE−DISC) | `cost_per_pack` — never list PRICE when NET present |
+| AMOUNT | `amount` (= QTY × NET) |
+
+### Detection
+
+Aliases: matesich, matesich distributing, OCR variants matisch/matesch.  
+Not ENGLEFIELD / DUCHESS / driver. Live detect after registry → `matesich` @ 95–100.
+
+### Pitfalls
+
+1. cost=NET not PRICE (Superlyte DISC 2.25 → NET 42.75).  
+2. NOT A FINAL INVOICE still extract.  
+3. Handwritten multi-ticket $ is payment memo — foot each picksheet to its Picksheet Total.  
+4. Cases/Gallons footer counts are not products.
+
+---
+
 ## Current registry keys
 
 See `vendors.list_vendors()` or `/health` → `ocr.vendors`:
@@ -594,6 +642,7 @@ See `vendors.list_vendors()` or `/health` → `ocr.vendors`:
 - `beverage_distributors`
 - `rl_lipton`
 - `southeast_beverage` — **Production-ready** (Newcomerstown 162891 $240.86)
+- `matesich` — **Production-ready** (Newcomerstown 624530+624531 / $2229.35 packet)
 - `coremark`
 - `generic` (fallback)
 
@@ -601,7 +650,7 @@ See `vendors.list_vendors()` or `/health` → `ocr.vendors`:
 
 ## Tramonte Distributing (reference)
 
-**Registry key:** `tramonte`  
+**Registry key:** `tramonte`
 **Sample:** `uploads/20260822_234211_f8d6a5a95a.pdf` (orig `Tramonte Arco akron .pdf`) — ARCO East Ave / VET RETAIL OPS.
 
 ### Structure

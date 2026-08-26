@@ -1181,6 +1181,80 @@ One JSON object per product ITEM# row only.
             "anchors in extract_rules; empty ssp → needs_review."
         ),
     ),
+    VendorSpec(
+        key="matesich",
+        display_name="Matesich Distributing Co.",
+        aliases=(
+            "matesich",
+            "matesich distributing",
+            "matesich distributing co",
+            "matesich distributing co.",
+            "matisch",  # OCR drop letter
+            "matesch",  # OCR drop letter
+        ),
+        detect_labels=(
+            "matesich",
+            "matesich distributing",
+            "matesich distributing co",
+        ),
+        extract_rules="""
+VENDOR = Matesich Distributing Co. (Ohio beer / RTD DSD picksheet).
+Letterhead: "MATESICH DISTRIBUTING CO." (sometimes OCR as MATESCH). Banner often
+**NOT A FINAL INVOICE** — still extract every product line (same as picksheet).
+Customer / ship-to (ENGLEFIELD INC, DUCHESS 1220 NEWCOMERSTOWN, 550 E STATE ST) is NOT the vendor.
+Driver / salesrep (e.g. DARIN GRIFFITH, ROB MYERS) are NOT the vendor.
+
+COLUMN LAYOUT (left → right) — thermal picksheet:
+  ITEM# | QTY | DESCRIPTION | SSP | PRICE | DISC | NET | AMOUNT
+Barcode stripes under each line are not always a full UPC — prefer ITEM# for product id when no true UPC digits.
+
+FIELD MAPPING (critical):
+- item_code = ITEM# with leading zeros (e.g. 00133, 02051, 208105).
+- upc = true barcode UPC only if clearly printed as digits; else leave empty (sheet falls back to item_code).
+  Do NOT invent upc from ITEM# in the JSON upc field if no barcode digits (item_code alone is enough).
+- description = brand/flavor words; pack_size = pack token in DESCRIPTION
+  (12/19.20Z, 12PK 12OZ, 24PK 12OZ, 30PK 12OZ, 6PK 16OZ, 25OZ, C3/8 VARIETY PACK, …).
+- qty_cases = **QTY** (hand checkmarks next to QTY are confirmation, not extra qty).
+  Never use Cases: footer count as a product qty.
+- ssp_per_pack = **SSP** (shelf). NEVER put SSP into cost.
+- cost_per_pack = **NET** (paid case cost). When DISC > 0, NET = PRICE − DISC (per case).
+  Example Superlyte: PRICE 45.00 DISC 2.25 NET 42.75 AMOUNT 85.50 for QTY 2 → cost 42.75 not 45.00.
+  If NET blank: cost = PRICE − DISC when DISC > 0 else PRICE.
+- amount = **AMOUNT** (= QTY × NET when clear).
+
+COMPLETENESS + FOOT:
+- Extract every ITEM# product row until Cases/Bottles/Kegs footer block.
+- Foot sum(amount) ≈ **Total Sales** / **Picksheet Total** (not handwritten multi-stop payment memos alone).
+- Two Newcomerstown picksheets same stop often paid together:
+  inv **624530** beer ~25 lines Picksheet Total **$2033.70** + inv **624531** RTD 4 lines **$195.65**
+  = handwritten **$2229.35** on the tall ticket — each photo is a complete picksheet; do not force one photo to equal 2229.35.
+
+SKIP (not products):
+- Cases / Bottles / Kegs / Misc / Returns / Gallons summary counts
+- Total Sales, Total Credits, Total Deposit, Picksheet Total labels
+- NOT A FINAL INVOICE banners, signatures, driver/salesrep alone
+- Second ticket peeking at photo edge (extract only the full ticket in frame unless both tables fully readable)
+
+One JSON object per product ITEM# row only.
+""".strip(),
+        critical_rules=(
+            "VENDOR=Matesich Distributing Co. letterhead — ENGLEFIELD/DUCHESS/driver NOT vendor. "
+            "Banner NOT A FINAL INVOICE still extract. "
+            "COLS: ITEM#|QTY|DESC|SSP|PRICE|DISC|NET|AMOUNT. "
+            "item_code=ITEM# (keep leading zeros); qty_cases=QTY; ssp=SSP never cost; "
+            "cost_per_pack=NET (PRICE−DISC when DISC>0) — never list PRICE when NET present; "
+            "amount=AMOUNT (=QTY×NET). "
+            "Foot sum≈Picksheet Total/Total Sales (e.g. 624530 → $2033.70 / ~25 lines; 624531 → $195.65 / 4 lines). "
+            "Handwritten multi-ticket $ (e.g. 2229.35=2033.70+195.65) is payment memo — foot each picksheet alone. "
+            "SKIP: Cases/Kegs/Gallons counts, Total Sales/Credits/Deposit/Picksheet Total labels."
+        ),
+        notes=(
+            "Newcomerstown Duchess dual picksheets 2026-08-26: "
+            "624530 photo 20260826_142154_68d26bcd38 (beer ~25 lines / $2033.70) + "
+            "624531 photo 20260826_142319_2fabd190b2 (RTD 4 lines / $195.65); "
+            "handwritten $2229.35 = sum; first live generic; cost=NET."
+        ),
+    ),
     # Non-beer wholesalers still hit c-stores — keep generic rules strong
     VendorSpec(
         key="coremark",

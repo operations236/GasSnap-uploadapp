@@ -739,3 +739,30 @@ PY
 Future extract gate: all 10 ssp_per_pack filled + 0 MM + foot $240.86. Do not treat money-only foot as complete for this vendor.
 
 ---
+
+## Matesich Distributing — Newcomerstown dual picksheets 2026-08-26
+
+| Field | Value |
+|-------|--------|
+| Beer photo | `uploads/20260826_142154_68d26bcd38.jpeg` inv **624530** |
+| RTD photo | `uploads/20260826_142319_2fabd190b2.jpeg` inv **624531** |
+| Store PIN | **Newcomerstown** · ship-to ENGLEFIELD / DUCHESS 1220 |
+| Layout | ITEM#\|QTY\|DESC\|SSP\|PRICE\|DISC\|NET\|AMOUNT |
+| First live | both `generic` / weak_detect |
+| Forced post-registry | detect `matesich` @ 95–100 |
+| 624530 | **25** lines · sum **$2033.70** · 0 MM · QA foot OK |
+| 624531 | **4** lines · sum **$195.65** · Superlyte cost **42.75** (NET) · 0 MM · QA OK |
+| Packet | handwritten **$2229.35** = 2033.70+195.65 (two picksheets) |
+| Sheet | first generic rows + append clean under **Matesich Distributing Co.** |
+| Date checked | 2026-08-26 |
+
+### 624531 anchors
+
+| item_code | qty | NET cost | amount |
+|-----------|-----|----------|--------|
+| 208105 | 1 | 38.30 | 38.30 |
+| 208006 | 1 | 38.30 | 38.30 |
+| 207615 | 1 | 33.55 | 33.55 |
+| 207640 | 2 | **42.75** (not list 45.00) | 85.50 |
+
+---
