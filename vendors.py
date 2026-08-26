@@ -513,10 +513,24 @@ FIELD MAPPING (critical):
 - pack_size = size/pack token from description (12OZ LS, 12OZ, 8.4OZ LS, 8.4OZ 4PK, 20OZ LS).
   LS = loose singles; 4PK = 4-pack.
 - qty_cases = **QTY** column only — copy as printed (fractional OK: 0.87, 1.33; whole cases OK: 1, 2).
-  UNITS (24) / (21) is unit count — NEVER use UNITS as qty_cases.
+  NEVER put UNITS into qty_cases.
+- units = **UNITS** column (REQUIRED on every product row) — integer piece count on the line
+  (e.g. 24, 12, or 21 on fractional pickups). Digits only. Footer "Units Delivered" should equal
+  sum(units) across product rows (Loudonville 24+24+24+12 = **84**).
+  Sheet mapping: units → **Calculated Qty** (total pieces). When QTY is a whole case count,
+  units÷QTY is units-per-case (Extracted Qty); for QTY=1, Extracted Qty = units.
 - amount = **TOTAL** column line extension. Strip $ and parentheses; abs if (41.73).
 - ssp_per_pack / ssp_per_unit / cost_per_unit: usually blank (not printed).
 - DEP / SUGAR columns: ignore for sheet fields.
+
+UNITS GOLD ANCHORS (operator-verified Inv - Loudonville inv **2037214470** /
+photo 20260824_180544_7bb9a02bb7 — Calculated Qty filled by hand from ticket UNITS):
+  RB234435 QTY 1 UNITS **24** RED 12OZ LS   cost net 50.71
+  RB248998 QTY 1 UNITS **24** ICED 12OZ     cost net 50.71
+  RB1718   QTY 1 UNITS **24** 8.4OZ LS      cost net 37.99
+  RB36463  QTY 1 UNITS **12** 20OZ LS       cost net 44.38
+  Packet: Cases Delivered 4 · Units Delivered **84** · TOTAL DUE **$183.79**
+Always read the UNITS column; never leave units empty when QTY/TOTAL are present.
 
 COST / PRICE vs DISC — two layouts on the same column set (detect which applies per line):
 A) **Case / list PRICE with DISC** (common on full-case delivery; QTY often whole 1, 2…):
@@ -544,8 +558,11 @@ OTHER RULES:
             "Banner NOT AN INVOICE still extract products. "
             "COLS: ID|QTY|UNITS|DESC|PRICE|DEP|DISC|SUGAR|TOTAL. "
             "item_code=ID (RB… exactly); upc=61126… under desc — NEVER RB id in upc; "
-            "qty_cases=QTY (fractional OK) NOT UNITS; pack_size from desc (12OZ LS, 8.4OZ LS, 20OZ LS); "
-            "amount=TOTAL (strip $ / parens). "
+            "qty_cases=QTY (fractional OK) NOT UNITS; "
+            "units=UNITS column REQUIRED (24/12/…) → sheet Calculated Qty; "
+            "when QTY whole, Extracted Qty≈units/QTY (QTY=1 → Extracted=units). "
+            "Gold inv 2037214470: RB234435/248998/1718 units 24; RB36463 units 12; sum units 84. "
+            "pack_size from desc (12OZ LS, 8.4OZ LS, 20OZ LS); amount=TOTAL (strip $ / parens). "
             "COST: if DISC>0 on full-case lines → cost_per_pack=PRICE−DISC (TOTAL often = net); "
             "if fractional QTY unit-style → cost_per_pack=PRICE. Never list PRICE as cost when DISC took $ off. "
             "Foot sum(amount)≈INVOICE/TOTAL DUE (e.g. 2037214470 → $183.79); footer DISCOUNT already in line TOTALS. "
@@ -554,7 +571,8 @@ OTHER RULES:
         notes=(
             "Killbuck load sheet 20260727_011518_ec9b2466a3 (fractional QTY + unit PRICE); "
             "Loudonville photo 20260824_180544_7bb9a02bb7 inv 2037214470 "
-            "(4 lines, TOTAL DUE $183.79, case PRICE−DISC; Loudonville Marathon ship-to)."
+            "(4 lines, TOTAL DUE $183.79, case PRICE−DISC; UNITS 24/24/24/12 → Calculated Qty; "
+            "operator-verified sheet; empty units → needs_review)."
         ),
     ),
     VendorSpec(
@@ -1406,6 +1424,7 @@ Return ONLY valid JSON (no markdown) with this shape:
       "description": "string — product name verbatim",
       "pack_size": "string — e.g. 24/12oz, 4/6pk, else empty",
       "qty_cases": "string — cases/qty ordered or shipped",
+      "units": "string — unit count when ticket prints UNITS (e.g. Red Bull 24) — total pieces on the line; else empty or omit",
       "cost_per_pack": "string — wholesale cost per pack/case if shown",
       "cost_per_unit": "string — cost per unit/each if shown",
       "ssp_per_pack": "string — suggested selling price per pack if shown (SRP/SSP/Reg Retail)",
@@ -1503,7 +1522,7 @@ def build_compact_extract_prompt(vendor: VendorSpec) -> str:
         + '","invoice_number":"","invoice_date":"",'
         '"ship_to_name":"","ship_to_address":"","ship_to_city":"",'
         '"overall_confidence":0,"line_items":[{"upc":"","item_code":"","description":"","pack_size":"",'
-        '"qty_cases":"","cost_per_pack":"","cost_per_unit":"","ssp_per_pack":"",'
+        '"qty_cases":"","units":"","cost_per_pack":"","cost_per_unit":"","ssp_per_pack":"",'
         '"ssp_per_unit":"","amount":"","invoice_number":"","confidence":0}],"notes":""}\n'
     )
     header = f"Vendor focus: {vendor.display_name} ({vendor.key}).\n"

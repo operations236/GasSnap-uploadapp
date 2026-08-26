@@ -473,6 +473,19 @@ def _normalize_line_items(data: Mapping[str, Any]) -> List[Dict[str, Any]]:
             "confidence": conf_i,
             "needs_review": needs,
         }
+        # Ticket UNITS / piece count (e.g. Red Bull) → Calculated Qty on sheet
+        units_s = str(
+            it.get("units")
+            or it.get("qty_units")
+            or it.get("unit_count")
+            or it.get("calculated_qty")
+            or ""
+        ).strip()
+        if units_s:
+            row["units"] = units_s
+        extracted_s = str(it.get("extracted_qty") or it.get("Extracted Qty") or "").strip()
+        if extracted_s:
+            row["extracted_qty"] = extracted_s
         # Preserve optional multi-invoice tagging when extract provides it.
         inv_no = str(it.get("invoice_number") or it.get("Invoice Number") or "").strip()
         if inv_no:
@@ -516,6 +529,18 @@ def line_items_for_sheets(extraction: Mapping[str, Any]) -> List[Dict[str, Any]]
             inv_no = str(it.get("invoice_number") or "").strip()
             if inv_no:
                 row["invoice_number"] = inv_no
+            # Calculated Qty = ticket units / total pieces when present
+            calc = str(
+                it.get("calculated_qty")
+                or it.get("units")
+                or it.get("Calculated Qty")
+                or ""
+            ).strip()
+            if calc:
+                row["calculated_qty"] = calc
+            extq = str(it.get("extracted_qty") or it.get("Extracted Qty") or "").strip()
+            if extq:
+                row["extracted_qty"] = extq
             out.append(row)
         return out
 
@@ -626,22 +651,50 @@ def extract_invoice_line_items(
                 q = _parse_money(str(it.get("qty_cases") or ""))
                 c = _parse_money(str(it.get("cost_per_pack") or ""))
                 a = _parse_money(str(it.get("amount") or ""))
-                if q is None or c is None or a is None or q == 0:
-                    continue
-                if abs(q * c - a) < Decimal("0.02"):
-                    continue
-                # Only correct when cost looks like list > net extension (DISC case layout)
-                if c > abs(a / q) and abs(a) > 0:
-                    net = (a / q).quantize(Decimal("0.01"))
-                    it["cost_per_pack"] = f"{net}"
-                    # Recompute review flag after cost fix
-                    conf_i = int(it.get("confidence") or 0)
-                    needs = conf_i < LOW_CONFIDENCE_THRESHOLD
-                    if not str(it.get("item_code") or "").strip():
-                        needs = True
-                    if abs(q * net - a) >= Decimal("0.02"):
-                        needs = True
-                    it["needs_review"] = needs
+                if q is not None and c is not None and a is not None and q != 0:
+                    if abs(q * c - a) >= Decimal("0.02"):
+                        # Only correct when cost looks like list > net extension (DISC case layout)
+                        if c > abs(a / q) and abs(a) > 0:
+                            net = (a / q).quantize(Decimal("0.01"))
+                            it["cost_per_pack"] = f"{net}"
+                            conf_i = int(it.get("confidence") or 0)
+                            needs = conf_i < LOW_CONFIDENCE_THRESHOLD
+                            if not str(it.get("item_code") or "").strip():
+                                needs = True
+                            if abs(q * net - a) >= Decimal("0.02"):
+                                needs = True
+                            it["needs_review"] = needs
+                # UNITS → Calculated Qty (operator gold on Loudonville 2037214470).
+                units_s = str(it.get("units") or it.get("calculated_qty") or "").strip()
+                # Strip parens if model copied "(24)"
+                if units_s.startswith("(") and units_s.endswith(")"):
+                    units_s = units_s[1:-1].strip()
+                if units_s:
+                    it["units"] = units_s
+                    it["calculated_qty"] = units_s
+                    # Extracted Qty = units per case when QTY is whole cases
+                    q_int = None
+                    try:
+                        qf = float(str(it.get("qty_cases") or "").strip() or "nan")
+                        if qf == qf and qf > 0 and abs(qf - round(qf)) < 1e-9:
+                            q_int = int(round(qf))
+                    except (TypeError, ValueError):
+                        q_int = None
+                    u_val = _parse_money(units_s)
+                    if q_int and q_int > 0 and u_val is not None:
+                        per = (u_val / Decimal(q_int)).quantize(Decimal("1"))
+                        # Prefer integer units-per-case when clean
+                        if per == per.to_integral_value():
+                            it["extracted_qty"] = str(int(per))
+                        else:
+                            it["extracted_qty"] = f"{per}"
+                else:
+                    # UNITS missing on a product line → review (money alone is incomplete for RB)
+                    if (
+                        str(it.get("item_code") or "").strip()
+                        or str(it.get("amount") or "").strip()
+                    ):
+                        it["needs_review"] = True
         # Southeast prints SSP on every product row; blank SSP is incomplete OCR (operator had to hand-fill).
         if vendor.key == "southeast_beverage":
             for it in items:

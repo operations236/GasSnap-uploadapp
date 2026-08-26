@@ -234,12 +234,16 @@ Banner may say **NOT AN INVOICE** — still extract products.
 | ID (`RB…`) | `item_code` |
 | UPC under description | `upc` |
 | QTY (fractional or whole cases) | `qty_cases` — never UNITS |
-| UNITS `(n)` | ignore for qty |
+| **UNITS** | `units` → sheet **Calculated Qty** (total pieces); required |
+| UNITS ÷ whole QTY | sheet **Extracted Qty** (units per case; QTY=1 → same as UNITS) |
+| UNITS `(n)` legacy note | ignore UNITS as qty_cases only |
 | DESCRIPTION | `description` + pack → `pack_size` |
 | **cost** | dual: fractional/unit → PRICE; full-case with DISC>0 → **PRICE−DISC** (TOTAL often = net) |
 | TOTAL | `amount` |
 | DEP/SUGAR | not mapped |
 | SSP | usually empty |
+
+Operator Loudonville inv **2037214470** hand-filled Calculated Qty **24/24/24/12** from ticket UNITS (footer Units Delivered 84). Empty units → needs_review.
 
 ### Detection
 

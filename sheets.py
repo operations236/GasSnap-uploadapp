@@ -68,6 +68,9 @@ INVOICE_HEADERS: List[str] = [
     "OCR Confidence",
     "Needs Review",
     "Vendor",  # display name from OCR registry (appended — keeps legacy rows aligned)
+    # Optional trailing qty fields (Item Pack Master / ticket UNITS) — never strip if already on tab
+    "Calculated Qty",
+    "Extracted Qty",
 ]
 
 _cache_lock = threading.Lock()
@@ -252,15 +255,60 @@ def _ensure_headers(ws: gspread.Worksheet) -> None:
     normalized = [c.strip() for c in existing]
     if normalized == INVOICE_HEADERS:
         return
-    # Safe upgrade: same leading columns (or prefix) → rewrite header row only
+    # Safe upgrade: same leading columns (or prefix) → rewrite header row only.
+    # Never drop trailing optional cols the tab already has beyond our contract.
     lead = ["Timestamp", "Store", "Invoice Number", "Invoice Date"]
-    if normalized[:4] == lead:
+    if normalized[:4] != lead:
+        logger.warning(
+            "Sheets: header mismatch on '%s' (left as-is). Expected %s got %s",
+            ws.title,
+            INVOICE_HEADERS,
+            normalized,
+        )
+        return
+    # If tab already has our full header or a longer compatible prefix, only append missing tails.
+    if normalized[: len(INVOICE_HEADERS)] == INVOICE_HEADERS:
+        return
+    # Build target = INVOICE_HEADERS, then any extra existing columns after that stay.
+    extras = []
+    if len(normalized) > len(INVOICE_HEADERS):
+        extras = normalized[len(INVOICE_HEADERS) :]
+    # If existing is a prefix of new headers (e.g. 16-col before Calculated/Extracted), upgrade.
+    base16 = INVOICE_HEADERS[:16]  # through Vendor
+    if normalized == base16 or normalized[:16] == base16:
+        target = list(INVOICE_HEADERS) + [c for c in extras if c and c not in INVOICE_HEADERS]
         try:
-            ws.update(range_name="A1", values=[INVOICE_HEADERS], value_input_option="RAW")
-            logger.info("Sheets: upgraded header on '%s' → %d cols", ws.title, len(INVOICE_HEADERS))
+            ws.update(range_name="A1", values=[target], value_input_option="RAW")
+            logger.info(
+                "Sheets: upgraded header on '%s' → %d cols", ws.title, len(target)
+            )
             return
         except Exception as e:
             logger.warning("Sheets: header upgrade failed on '%s': %s", ws.title, e)
+            return
+    # Partial match: if Vendor present and missing qty tails, append header cells only.
+    if "Vendor" in normalized:
+        missing = [h for h in ("Calculated Qty", "Extracted Qty") if h not in normalized]
+        if missing:
+            start_col = len(normalized) + 1
+            try:
+                # Column index → A1 without gspread.utils (keep deps thin)
+                def _col_a1(c: int) -> str:
+                    s = ""
+                    while c:
+                        c, r = divmod(c - 1, 26)
+                        s = chr(65 + r) + s
+                    return s
+
+                cell = f"{_col_a1(start_col)}1"
+                ws.update(range_name=cell, values=[missing], value_input_option="RAW")
+                logger.info(
+                    "Sheets: appended header cols %s on '%s'", missing, ws.title
+                )
+                return
+            except Exception as e:
+                logger.warning("Sheets: append header cols failed on '%s': %s", ws.title, e)
+                return
     logger.warning(
         "Sheets: header mismatch on '%s' (left as-is). Expected %s got %s",
         ws.title,
@@ -332,6 +380,8 @@ def build_invoice_rows(
             conf if conf != "" else "",
             needs,
             vendor_name,
+            g("calculated_qty", g("Calculated Qty", g("units", ""))) or "",
+            g("extracted_qty", g("Extracted Qty", "")) or "",
         ]
 
     if line_items:
