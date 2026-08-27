@@ -842,4 +842,4 @@ Production-ready **locked** after 3 consecutive green extracts (2026-08-26 harde
 | 1489581 | 1 | 1 | 78.80 |
 | 999979 | — | — | 5.00 |
 
-First live: `generic` @40 weak_detect (letterhead crop "UWN OHIO 44513"); money foot OK with generic unit prices.
+First live: `generic` @40 weak_detect (letterhead crop). Harden: crop string + phone → AT; bare `ohio 44513` does **not** lock; 10-digit Big Hug UPC 74806… on sheet; missing units (non-delivery) → NR; 2× forced extract green 12/$364.98.

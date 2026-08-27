@@ -825,9 +825,10 @@ Product U.P.C. column = **ITEM# + barcode** on one line.
 
 ### Detection
 
-Aliases: austintown dairy / austin town; (330) 629-6170; 780 Bev; ohio 44513 / Youngstown 44513.  
-Do **not** alias BP Pearl / Parma customer.  
-First live Parma 2026-08-27: letterhead crop → `generic` @40; after registry expect `austintown_dairy`.
+Aliases: austintown dairy / austin town; **(330) 629-6170** / 629-6170; 780 bev rd; youngstown oh 44513; OCR garble **uwn, ohio 44513**.  
+**Not** aliased (too broad): bare `ohio 44513`, bare `bev rd` / `bev road`.  
+Crop path still locks: `UWN, OHIO 44513 (330)629-6170` → `austintown_dairy` via phone or UWN+zip.  
+Do **not** alias BP Pearl / Parma customer.
 
 ### Sample totals (Parma 2026-08-27)
 
@@ -836,7 +837,8 @@ Gold: 14059 4/16/$47.51; 514153 3/12/$37.26; 1489581 $78.80; delivery $5.00.
 
 ### Pitfalls
 
-1. Letterhead name cropped — phone/zip still identify vendor.  
+1. Letterhead name cropped — phone **629-6170** or OCR **UWN+44513** identify vendor; bare zip alone is **not** an alias.
+1b. Big Hug UPC is often **10 digits** (74806…) — must survive into sheet UPC (not ITEM# only).  
 2. Case Quantity ≠ Total Units (gallons 4 cases / 16 units) — never put 16 into qty_cases.  
 3. cost_per_pack = Amount÷Case, not raw Price when Price is per-gallon.  
 4. Include DELIVERY CHARGE so sum matches Total $364.98.  

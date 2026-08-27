@@ -1376,17 +1376,20 @@ One JSON object per product ITEM# row only.
             "austin town",
             "austintowndairy",
             "austintown dairy inc",
+            # Phone is the reliable crop-letterhead cue (zip alone too broad).
             "(330) 629-6170",
             "330-629-6170",
             "330)629-6170",
             "629-6170",
-            "780 bev",
-            "bev rd",
-            "bev road",
-            # Phone-scan letterhead often crops the name; zip+phone still unique
-            "ohio 44513",
+            "780 bev rd",
+            "780 bev road",
+            # Full city+zip only — bare "ohio 44513" / bare "bev rd" intentionally omitted
             "youngstown, oh 44513",
             "youngstown oh 44513",
+            # CamScanner OCR often garbles Youngstown → "UWN" + zip (crop path without phone)
+            "uwn, ohio 44513",
+            "uwn ohio 44513",
+            "uwn, ohio",
         ),
         detect_labels=(
             "austintown dairy",
@@ -1418,7 +1421,9 @@ COLUMN LAYOUT (left → right) — continuous-form dairy ticket:
 "Product U.P.C." is a COMBINED left column: vendor ITEM# then barcode UPC on the same line
 (e.g. "14059 007654500187", "6241 7480600161", "32450 070640400720").
 - item_code = leading product/ITEM# (keep as printed; short codes OK: 6241, 3085, 999979)
-- upc = trailing barcode digits when present (10–13 digits). Do NOT put ITEM# into upc.
+- upc = trailing barcode digits when present (10–13 digits, e.g. Big Hug **7480600161** /
+  **7480600159**). Do NOT put ITEM# into upc. 10-digit codes are real barcodes on this form —
+  never drop them because they are not 12 digits.
 - DELIVERY CHARGE rows often have only a fee code (999979) and no barcode — upc empty.
 
 Description includes pack tokens inline:
@@ -1491,7 +1496,7 @@ UPC pitfalls on this form:
             "No SSP on this ticket — leave ssp empty. "
             "INCLUDE DELIVERY CHARGE 999979 amount so sum foots Total (Parma 897375: 12 lines / $364.98 / 17 cases / 44 units). "
             "Anchors: 14059 4/16/2.9693/47.51; 514153 3/12/3.1052/37.26; 1489581 1/1/78.80/78.80; delivery 5.00. "
-            "Ship-to BP Pearl/Parma ≠ vendor. Letterhead Austintown Dairy / (330)629-6170 / 44513. "
+            "Ship-to BP Pearl/Parma ≠ vendor. Letterhead Austintown Dairy / (330)629-6170 (crop OK; bare zip alone not an alias). UPC may be 10 digits (74806… Big Hug) — keep in upc, never ITEM# only. "
             "SKIP: Total/Cases Delivered|Returned/Cash/Signature footers only."
         ),
         notes=(

@@ -271,7 +271,8 @@ def detect_vendor(
 
 def _looks_like_upc(value: str) -> bool:
     digits = re.sub(r"\D", "", value or "")
-    return len(digits) in (11, 12, 13, 14)
+    # 10 = some dairy/novelty tickets (Austintown Big Hug 74806…); 11–14 common UPC/EAN
+    return len(digits) in (10, 11, 12, 13, 14)
 
 
 def _upc_a_check_digit(d11: str) -> str:
@@ -300,6 +301,13 @@ def _product_id_for_sheet(upc: str, item_code: str) -> str:
     c = (item_code or "").strip()
     if u and _looks_like_upc(u):
         return _normalize_upc_digits(u)
+    # Prefer longer digit run as barcode when model stuffed ITEM# into upc or vice versa
+    u_d = re.sub(r"\D", "", u)
+    c_d = re.sub(r"\D", "", c)
+    if u_d and len(u_d) >= 10:
+        return u_d
+    if c_d and len(c_d) >= 10 and len(c_d) > len(u_d or ""):
+        return c_d
     if u and not c:
         return u
     if c:
@@ -427,14 +435,34 @@ def _apply_vendor_item_fixes(vendor: Any, items: List[Dict[str, Any]]) -> None:
     if vendor.key == "austintown_dairy":
         # Case Quantity + Total Units + Price; cost_per_pack = Amount÷Case when needed.
         for it in items:
-            # Never keep ITEM# (or fee code) in upc.
             code = str(it.get("item_code") or "").strip()
-            upc = str(it.get("upc") or "").strip()
-            if code and upc and re.sub(r"\D", "", upc) == re.sub(r"\D", "", code):
+            upc = str(it.get("upc") or it.get("upc_raw") or "").strip()
+            # Split "6241 7480600161" if model jammed ITEM#+barcode into one field.
+            for field in ("item_code", "upc", "upc_raw"):
+                raw = str(it.get(field) or "").strip()
+                parts = raw.split()
+                if len(parts) >= 2:
+                    left, right = parts[0], parts[-1]
+                    ld, rd = re.sub(r"\D", "", left), re.sub(r"\D", "", right)
+                    if ld and rd and len(rd) >= 10 and len(ld) <= 8:
+                        code = left
+                        upc = right
+                        it["item_code"] = code
+                        it["upc"] = upc
+                        break
+            # Never keep bare ITEM# / fee code in upc — but keep real 10–13 digit barcodes.
+            code_d = re.sub(r"\D", "", code)
+            upc_d = re.sub(r"\D", "", upc)
+            if code and upc and upc_d == code_d:
                 it["upc"] = ""
                 upc = ""
+                upc_d = ""
             if code in {"999979", "99999"} or "delivery" in str(it.get("description") or "").lower():
                 it["upc"] = ""
+                upc = ""
+                upc_d = ""
+            elif upc_d and len(upc_d) >= 10:
+                it["upc"] = upc_d  # preserve 10-digit Big Hug etc. through product_id
             q = _parse_money(str(it.get("qty_cases") or ""))
             a = _parse_money(str(it.get("amount") or ""))
             c = _parse_money(str(it.get("cost_per_pack") or ""))
@@ -478,6 +506,17 @@ def _apply_vendor_item_fixes(vendor: Any, items: List[Dict[str, Any]]) -> None:
             elif q is not None and u_val is not None and u_val == q:
                 # case-priced line — unit slot should stay empty
                 it["cost_per_unit"] = ""
+            # Soft gate: product lines should carry Total Units (delivery exempt).
+            is_delivery = (
+                code in {"999979", "99999"}
+                or "delivery" in str(it.get("description") or "").lower()
+            )
+            if not is_delivery and not str(it.get("units") or it.get("calculated_qty") or "").strip():
+                if (
+                    str(it.get("item_code") or "").strip()
+                    or str(it.get("amount") or "").strip()
+                ):
+                    it["needs_review"] = True
     _reconcile_qty_cost_amount(items)
 
 
