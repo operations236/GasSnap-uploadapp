@@ -810,3 +810,36 @@ Future extract gate: all 10 ssp_per_pack filled + 0 MM + foot $240.86. Do not tr
 Production-ready **locked** after 3 consecutive green extracts (2026-08-26 harden). Tall-ticket still warrants foot check on live uploads. Shared `ocr.py` foot-retry (full→compact→full) + qty-from-EXT reconcile helps when a single pass drops money.
 
 ---
+
+
+## Austintown Dairy — Parma inv 897375 (2026-08-27)
+
+**Sample:** `uploads/20260827_180649_ff5063b5d8.pdf`  
+**Store PIN tab:** Inv - Parma  
+**Registry key:** `austintown_dairy`
+
+| Check | Gold |
+|-------|------|
+| Detect | `austintown_dairy` (letterhead may crop — phone 629-6170 / 44513) |
+| Lines | **12** (11 product + DELIVERY CHARGE) |
+| Sum amount | **$364.98** = footer Total |
+| Cases | **17** (product Case Quantity sum) |
+| Units | **44** (Total Units sum) |
+| cost | Amount÷Case (14059 → ~11.88; 6241 → 11.19) |
+| units field | Total Units → Calculated Qty |
+| SSP | empty |
+| Delivery | item_code **999979** amount **5.00** included |
+
+**ITEM# checklist:** 999979, 14059, 514153, 512153, 6241, 6244, 6243, 3085, 32450, 1405715, 3243, 1489581
+
+**Anchors:**
+| item_code | case | units | amount |
+|-----------|------|-------|--------|
+| 14059 | 4 | 16 | 47.51 |
+| 514153 | 3 | 12 | 37.26 |
+| 512153 | 2 | 8 | 18.92 |
+| 6241 | 1 | 1 | 11.19 |
+| 1489581 | 1 | 1 | 78.80 |
+| 999979 | — | — | 5.00 |
+
+First live: `generic` @40 weak_detect (letterhead crop "UWN OHIO 44513"); money foot OK with generic unit prices.

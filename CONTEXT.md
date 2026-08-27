@@ -33,6 +33,7 @@
 | `southeast_beverage` | **Production-ready** — Newcomerstown EAGLE BP photo `20260824_233516_46e8959b51` inv **162891** (10 lines, **$240.86**; cost=UNIT PRICE; **SSP required** — operator gold on sheet; empty ssp→NR) |
 | `matesich` | **Production-ready** — Newcomerstown Duchess dual picksheets `20260826_142154_68d26bcd38` inv **624530** (25/$2033.70) + `20260826_142319_2fabd190b2` inv **624531** (4/$195.65); packet handwritten **$2229.35**; cost=NET |
 | `mansfield` | **Production-ready** — Killbuck `20260826_183001_c95ef6b993` inv **3552801** (**38** lines / **$2288.27**; cost=NET; 3× green extract; first live generic incomplete) |
+| `austintown_dairy` | **Registered / first sample** — Parma PDF `20260827_180649_ff5063b5d8` inv **897375** (12 lines, **$364.98** / 17 cases / 44 units; cost=Amount÷Case; units=Total Units; first live generic weak_detect letterhead crop) |
 | `coremark` | Registered |
 | `generic` | Fallback |
 
@@ -57,6 +58,7 @@ Each vendor can use different invoice formats → **vendor-specific extract_rule
 - **Store tab = PIN/session store** (authoritative). OCR ship-to is compared in the background only: if it matches a *different* known store, metadata gets `store_check.mismatch` + rows get `Needs Review=TRUE` — no frontend delay, no auto-reroute.
 
 ## Current Focus
+- **Austintown Dairy (2026-08-27):** Parma inv **897375** sample registered (`austintown_dairy`); cost=Amount÷Case; Total Units→Calculated Qty; letterhead crop detect via phone/44513.
 - **Item Pack Master Phase 1 (2026-08-23):** manual Extracted Qty on Inv tabs → upsert master by UPC; grow coverage across vendors; optional PDi dump compare later. Phase 2 = post-OCR lookup + Cost per Unit / Calculated Qty on write.
 - Prior: ARCO Tramonte dual inv; OBD 244557; Lipton 443513; Killbuck Superior 3754642; post-extract QA live.
 - Sheets: **append-only** unless operator asks to replace.

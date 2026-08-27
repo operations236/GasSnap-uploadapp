@@ -1365,6 +1365,142 @@ One JSON object per product ITEM# row only.
             "verify 3× foot before trust; first live generic incomplete; cost=NET."
         ),
     ),
+    # Dairy / c-store DSD (Austintown Dairy — NE Ohio)
+    VendorSpec(
+        key="austintown_dairy",
+        display_name="Austintown Dairy",
+        aliases=(
+            "austintown dairy",
+            "austin town dairy",
+            "austintown",
+            "austin town",
+            "austintowndairy",
+            "austintown dairy inc",
+            "(330) 629-6170",
+            "330-629-6170",
+            "330)629-6170",
+            "629-6170",
+            "780 bev",
+            "bev rd",
+            "bev road",
+            # Phone-scan letterhead often crops the name; zip+phone still unique
+            "ohio 44513",
+            "youngstown, oh 44513",
+            "youngstown oh 44513",
+        ),
+        detect_labels=(
+            "austintown dairy",
+            "austintown",
+            "austin town dairy",
+            "austin town",
+        ),
+        extract_rules="""
+VENDOR = Austintown Dairy (NE Ohio dairy / ice-cream / tea DSD wholesaler).
+Legal/brand: "Austintown Dairy" / "Austintown Dairy Inc." (operators often type AustinTown).
+Letterhead cues (phone scans frequently crop the logo/name at the top edge):
+  780 Bev Rd / Youngstown, OH 44512–44513
+  (330) 629-6170 Ext. 0000
+  PO Box 9484 Youngstown OH 44513
+OCR may garble Youngstown as "UWN" / partial city — still this vendor when phone 629-6170 or 44513 dairy ticket.
+Customer / ship-to (BP - Pearl Rd, 5385 Pearl Rd, Parma OH 44129, store phone 216-661-4911) is NOT the vendor.
+Salesperson / Taken By (e.g. Angela1) is NOT the vendor.
+CamScanner / phone PDFs of this form are often ROTATED 90° — still extract the full table.
+
+HEADER FIELDS:
+- Invoice Number (e.g. 897375) + Invoice Date (e.g. 8/27/2026)
+- Order # (e.g. 2700007) — not the invoice number
+- Route (e.g. 478-1), Page N
+- Sold To / Ship To customer blocks → ship_to_* only
+
+COLUMN LAYOUT (left → right) — continuous-form dairy ticket:
+  Product U.P.C. | Description | Case Quantity | Units Quantity | Total Units | Price | Amount
+
+"Product U.P.C." is a COMBINED left column: vendor ITEM# then barcode UPC on the same line
+(e.g. "14059 007654500187", "6241 7480600161", "32450 070640400720").
+- item_code = leading product/ITEM# (keep as printed; short codes OK: 6241, 3085, 999979)
+- upc = trailing barcode digits when present (10–13 digits). Do NOT put ITEM# into upc.
+- DELIVERY CHARGE rows often have only a fee code (999979) and no barcode — upc empty.
+
+Description includes pack tokens inline:
+  "GAL SWISS PREM SWEET TEA", "BIG HUG FRUIT 16oz 24pk", "BB VANILLA CONE 4.6oz 24pk",
+  "BB SOFT CHOC VANILLA CONE 4.5oz 2", "BB BUTTERFINGER 2.8oz 2-24pk", "PT BB DOUBLE STRAWBERRY"
+- description = full product name (or brand + flavor with pack stripped when clear)
+- pack_size = pack token (GAL, 16oz 24pk, 4.6oz 24pk, 4.5oz 2, 2.8oz 2-24pk, PT, …)
+
+QTY / UNITS (critical — dual columns like Red Bull style):
+- qty_cases = **Case Quantity** (cases ordered/shipped). Integer; 0 rare.
+- Units Quantity column is often blank on this form — ignore when empty.
+- units = **Total Units** (piece/gallon count on the line). REQUIRED when printed.
+  Gallons example: Case Quantity 4 → Total Units 16 (4 gal per case).
+  Case novelties often: Case Quantity 1 → Total Units 1 (Price is the case/line price).
+- Never put Total Units into qty_cases when Case Quantity is present.
+- Footer "Total:" Case sum + Total Units sum are checksums only — not product rows.
+
+PRICE / COST / AMOUNT (critical):
+- Price column is the ticket unit-price field (often 4 decimal places, e.g. 2.9693, 11.1900).
+- amount = printed **Amount** (= Total Units × Price). Always capture Amount.
+  Gold checks: 16 × 2.9693 ≈ 47.51; 12 × 3.1052 ≈ 37.26; 1 × 11.1900 = 11.19; 1 × 78.8000 = 78.80.
+- cost_per_pack (wholesale pack/case cost for sheet/PDi):
+  * When Case Quantity > 0: cost_per_pack = Amount ÷ Case Quantity
+    (gallons 47.51/4 ≈ 11.8775; Big Hug 11.19/1 = 11.19; Butterfinger 78.80/1 = 78.80).
+  * Do NOT leave cost_per_pack empty when Amount and Case Quantity are readable.
+- cost_per_unit:
+  * When Total Units > Case Quantity (true per-each/per-gallon Price): cost_per_unit = Price
+  * When Total Units == Case Quantity (Price already case/line): leave cost_per_unit empty
+    (cost lives in cost_per_pack).
+- Never put Amount into cost fields. Never invent SSP — this ticket has no retail/SSP column
+  (leave ssp_per_pack / ssp_per_unit empty).
+
+DELIVERY / FEES:
+- Row Product 999979 "DELIVERY CHARGE" with Amount $5.00 (no cases) **IS included** so packet
+  sum(amount) matches footer Total $ — emit as a line: item_code=999979, description=DELIVERY CHARGE,
+  amount=5.00, qty_cases empty or 0, units empty, cost empty, upc empty, confidence lower OK.
+- Do not invent other fee rows. Skip blank signature / Cash / Cases Delivered|Returned lines.
+
+COMPLETENESS + FOOT (validated Parma sample inv **897375**):
+- Product lines (11) + delivery (1) = **12** rows.
+- Case Quantity sum of products = **17**; Total Units sum = **44**; Amount sum = **$364.98** = footer Total.
+- Gold anchors (item_code | case | total_units | price | amount):
+  14059 | 4 | 16 | 2.9693 | 47.51   GAL SWISS PREM SWEET TEA
+  514153 | 3 | 12 | 3.1052 | 37.26  GAL DAIRYNENS ICED TEA
+  512153 | 2 | 8 | 2.3656 | 18.92   GAL DAIRYNENS LEMON DRINK
+  6241 | 1 | 1 | 11.1900 | 11.19    BIG HUG FRUIT 16oz 24pk
+  6244 | 1 | 1 | 11.1900 | 11.19    BIG HUG BLUE RASPBERRY
+  6243 | 1 | 1 | 11.1900 | 11.19    BIG HUG GRAPE
+  3085 | 1 | 1 | 26.4500 | 26.45    PT BB DOUBLE STRAWBERRY
+  32450 | 1 | 1 | 39.6800 | 39.68   BB VANILLA CONE
+  1405715 | 1 | 1 | 39.6800 | 39.68 BB SOFT CHOC VANILLA CONE
+  3243 | 1 | 1 | 38.1100 | 38.11   BB KS STRAW SHORTCAKE
+  1489581 | 1 | 1 | 78.8000 | 78.80 BB BUTTERFINGER
+  999979 | — | — | — | 5.00        DELIVERY CHARGE
+- Set invoice_total / total_content to footer **Total $364.98** when readable.
+- Prefer operator-entered invoice # when non-empty; else printed Invoice Number.
+
+UPC pitfalls on this form:
+- Big Hug lines share similar 74806… UPCs across flavors — still capture per row as printed.
+- Some UPCs print 10–11 digits (7480600161) — keep digits as printed; do not invent check digit unless sure.
+- item_code and upc are BOTH required when both print in the Product U.P.C. column.
+""".strip(),
+        critical_rules=(
+            "COLS: Product U.P.C.(ITEM#+barcode) | DESC | Case Qty | Units Qty | Total Units | Price | Amount. "
+            "item_code=leading ITEM#; upc=barcode only (not ITEM#). "
+            "qty_cases=Case Quantity; units=Total Units (required when printed) — never swap. "
+            "amount=Amount (=Total Units×Price). "
+            "cost_per_pack=Amount÷Case Qty when Case Qty>0 (never leave blank if both readable). "
+            "cost_per_unit=Price only when Total Units>Case Qty (per-gal/each); else empty. "
+            "No SSP on this ticket — leave ssp empty. "
+            "INCLUDE DELIVERY CHARGE 999979 amount so sum foots Total (Parma 897375: 12 lines / $364.98 / 17 cases / 44 units). "
+            "Anchors: 14059 4/16/2.9693/47.51; 514153 3/12/3.1052/37.26; 1489581 1/1/78.80/78.80; delivery 5.00. "
+            "Ship-to BP Pearl/Parma ≠ vendor. Letterhead Austintown Dairy / (330)629-6170 / 44513. "
+            "SKIP: Total/Cases Delivered|Returned/Cash/Signature footers only."
+        ),
+        notes=(
+            "Parma PDF 20260827_180649_ff5063b5d8.pdf inv 897375: "
+            "12 lines (11 product + delivery) sum $364.98; first live generic weak_detect "
+            "(letterhead crop); cost=Amount÷Case; units=Total Units. "
+            "Official name Austintown Dairy (operator AustinTown)."
+        ),
+    ),
     # Non-beer wholesalers still hit c-stores — keep generic rules strong
     VendorSpec(
         key="coremark",

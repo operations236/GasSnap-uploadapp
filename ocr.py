@@ -160,6 +160,25 @@ def detect_vendor(
 
         # Letterhead NAME match (excludes shared Akron DC address/phone alone).
         from_name = vendor_registry.letterhead_name_vendor(printed)
+        # Cropped letterheads: Gemini often leaves vendor_name_printed empty but cites
+        # phone/zip in reason (Austintown 629-6170 / 44513). Alias-scan reason as fallback.
+        if from_name is None and reason:
+            from_reason = vendor_registry.match_vendor_text(reason)
+            if from_reason is not None:
+                from_name = from_reason
+                conf = max(conf, 85)
+                if not printed:
+                    printed = from_reason.display_name
+                reason = (reason + f"; reason-alias → {from_reason.key}").strip("; ")
+        # Also try printed+reason together for partial OCR ("UWN, OHIO 44513").
+        if from_name is None:
+            combo = f"{printed} {reason}".strip()
+            if combo:
+                from_combo = vendor_registry.match_vendor_text(combo)
+                if from_combo is not None:
+                    from_name = from_combo
+                    conf = max(conf, 85)
+                    reason = (reason + f"; cue-alias → {from_combo.key}").strip("; ")
         from_key = vendor_registry.get_vendor(key_raw)
         key_is_known = from_key.key != vendor_registry.GENERIC.key
         # Trust model key only if confident enough; alias on printed letterhead always OK.
@@ -405,6 +424,60 @@ def _apply_vendor_item_fixes(vendor: Any, items: List[Dict[str, Any]]) -> None:
                 or str(it.get("item_code") or "").strip()
             ):
                 it["needs_review"] = True
+    if vendor.key == "austintown_dairy":
+        # Case Quantity + Total Units + Price; cost_per_pack = Amount÷Case when needed.
+        for it in items:
+            # Never keep ITEM# (or fee code) in upc.
+            code = str(it.get("item_code") or "").strip()
+            upc = str(it.get("upc") or "").strip()
+            if code and upc and re.sub(r"\D", "", upc) == re.sub(r"\D", "", code):
+                it["upc"] = ""
+                upc = ""
+            if code in {"999979", "99999"} or "delivery" in str(it.get("description") or "").lower():
+                it["upc"] = ""
+            q = _parse_money(str(it.get("qty_cases") or ""))
+            a = _parse_money(str(it.get("amount") or ""))
+            c = _parse_money(str(it.get("cost_per_pack") or ""))
+            u_price = _parse_money(str(it.get("cost_per_unit") or ""))
+            units_s = str(it.get("units") or it.get("calculated_qty") or "").strip()
+            if units_s.startswith("(") and units_s.endswith(")"):
+                units_s = units_s[1:-1].strip()
+            u_val = _parse_money(units_s) if units_s else None
+            # Prefer Total Units into Calculated Qty (RB-style).
+            if units_s:
+                it["units"] = units_s
+                it["calculated_qty"] = units_s
+                if q is not None and q > 0 and u_val is not None:
+                    try:
+                        q_int = int(q) if q == q.to_integral_value() else None
+                    except Exception:
+                        q_int = None
+                    if q_int and q_int > 0:
+                        per = (u_val / Decimal(q_int)).quantize(Decimal("0.01"))
+                        if per == per.to_integral_value():
+                            it["extracted_qty"] = str(int(per))
+                        else:
+                            it["extracted_qty"] = f"{per}"
+            # Fill cost_per_pack from Amount÷Case Quantity when blank/wrong.
+            if q is not None and q > 0 and a is not None:
+                pack_cost = (a / q).quantize(Decimal("0.01"))
+                if c is None or abs(q * c - a) >= Decimal("0.02"):
+                    it["cost_per_pack"] = f"{pack_cost}"
+                    c = pack_cost
+            # cost_per_unit = unit Price only when Total Units > Case Qty.
+            if (
+                q is not None
+                and u_val is not None
+                and u_val > q
+                and u_price is None
+                and a is not None
+                and u_val > 0
+            ):
+                # recover unit price from amount/units if Gemini left it blank
+                it["cost_per_unit"] = f"{(a / u_val).quantize(Decimal('0.0001'))}"
+            elif q is not None and u_val is not None and u_val == q:
+                # case-priced line — unit slot should stay empty
+                it["cost_per_unit"] = ""
     _reconcile_qty_cost_amount(items)
 
 

@@ -778,3 +778,68 @@ Full recipe: skill `references/tramonte.md` (when present) + app VALIDATION.md.
 - Fail the HTTP upload if OCR/Sheets errors
 - Use `USER_ENTERED` sheet append (strips leading zeros)
 - Commit real invoice photos with customer PII to public git without review
+
+
+---
+
+## Austintown Dairy (reference)
+
+**Sample:** `uploads/20260827_180649_ff5063b5d8.pdf` (Parma / BP Pearl Rd — CamScanner PDF, often rotated).  
+**Registry key:** `austintown_dairy`  
+**Operator spelling:** AustinTown / Austin Town — aliases accepted (official **Austintown Dairy**).
+
+### Structure
+
+Continuous-form dairy ticket. Letterhead often cropped on phone scans — rely on **(330) 629-6170** + Youngstown **44513** / Bev Rd when name is missing.
+
+```
+Austintown Dairy … Youngstown, OH 44513  (330) 629-6170
+Invoice Date / Invoice Number / Route
+Sold To / Ship To = customer (BP Pearl / Parma) — NOT vendor
+
+Product U.P.C. | Description | Case Quantity | Units Quantity | Total Units | Price | Amount
+14059 007654500187  GAL SWISS PREM SWEET TEA   4   (blank)   16   2.9693   47.51
+6241 7480600161     BIG HUG FRUIT 16oz 24pk    1   (blank)    1  11.1900   11.19
+999979              DELIVERY CHARGE            —      —       —      —      5.00
+…
+Total:  cases 17   units 44   $364.98
+```
+
+Product U.P.C. column = **ITEM# + barcode** on one line.
+
+### Schema mapping
+
+| Ticket | JSON / sheet |
+|--------|----------------|
+| Leading ITEM# in Product U.P.C. | `item_code` |
+| Trailing barcode | `upc` |
+| Case Quantity | `qty_cases` |
+| **Total Units** | `units` → sheet **Calculated Qty** |
+| Total Units ÷ Case Qty (when whole) | sheet **Extracted Qty** (units per case) |
+| Description (+ pack token) | `description` + `pack_size` |
+| **cost_per_pack** | **Amount ÷ Case Quantity** when Case Qty > 0 |
+| **cost_per_unit** | **Price** only when Total Units > Case Qty (per-gal); else empty |
+| Amount | `amount` (= Total Units × Price) |
+| SSP | empty (not printed) |
+| DELIVERY CHARGE 999979 | keep as line so packet foots Total |
+
+### Detection
+
+Aliases: austintown dairy / austin town; (330) 629-6170; 780 Bev; ohio 44513 / Youngstown 44513.  
+Do **not** alias BP Pearl / Parma customer.  
+First live Parma 2026-08-27: letterhead crop → `generic` @40; after registry expect `austintown_dairy`.
+
+### Sample totals (Parma 2026-08-27)
+
+Inv **897375** · **12** lines (11 product + delivery) · sum **$364.98** · cases **17** · units **44**.  
+Gold: 14059 4/16/$47.51; 514153 3/12/$37.26; 1489581 $78.80; delivery $5.00.
+
+### Pitfalls
+
+1. Letterhead name cropped — phone/zip still identify vendor.  
+2. Case Quantity ≠ Total Units (gallons 4 cases / 16 units) — never put 16 into qty_cases.  
+3. cost_per_pack = Amount÷Case, not raw Price when Price is per-gallon.  
+4. Include DELIVERY CHARGE so sum matches Total $364.98.  
+5. No SSP column — leave empty.  
+6. Rotated CamScanner PDF — still extract full table.
+
