@@ -140,6 +140,8 @@ curl -sS http://127.0.0.1:8010/health
 **Registry key:** `superior_beverage`  
 **Samples:**
 - Glenwillow (DISC/NET + wrap): `uploads/20260727_002200_098f3e9d6e.jpeg`
+- **Parma Glenwillow layout A:** `uploads/20260822_003027_0c3c62bec6.jpeg` — inv **3749614**, **28** lines, Total Content **$1226.22** (Invoice Total $1262.57 w/ fees)
+- **Killbuck multipage PDF layout A:** `uploads/20260822_031623_ec39b6eebc.pdf` — inv **3754642**, **74** lines, **$3485.12**
 - **Akron ARCO East Ave (DEP + pack-in-desc):** `uploads/20260729_223234_5d8a7de7dd.jpg` — inv **10549752**, Invoice Total / Beer$ **$1,844.69**, Cases **80**
 
 ### Structure — two DC layouts (same vendor)
@@ -148,7 +150,8 @@ curl -sS http://127.0.0.1:8010/health
 ```
 ITEM# | QTY | DESCRIPTION | U.P.C. | SSP | PRICE | DISC | NET | AMOUNT
 ```
-Description often wraps: line A brand, line B pack (STUBBY 2/12 NR, …).
+Description often wraps: line A brand, line B pack (STUBBY 2/12 NR, …).  
+**cost_per_pack = NET** (or PRICE−DISC if NET blurry). List PRICE is **not** cost when DISC/NET present.
 
 **B) Akron DC / thermal house ticket** — 1267 S. Main St, Akron, OH 44301, (330) 535-3103:
 ```
@@ -156,6 +159,7 @@ ITEM# | QTY | DESCRIPTION | UPC | SSP | PRICE | DEP | AMOUNT
 ```
 Pack tokens usually sit **in** the single description line (`MIKE BLK CHERRY 6PK CAN`).  
 DEP is deposit (almost always 0.00) — **not** DISC/NET.  
+**cost_per_pack = PRICE** on layout B only. Never put DEP into cost.  
 Ship-to example: VET RETAIL OPS LLC / ARCO / 2275 EAST AVE / AKRON OH 44314.
 
 ### Schema mapping (Superior → shared fields)
@@ -164,23 +168,23 @@ Ship-to example: VET RETAIL OPS LLC / ARCO / 2275 EAST AVE / AKRON OH 44314.
 |---------------|--------------------|--------|
 | ITEM# | `item_code` | Keep leading zeros; **per row** (never reuse prior ITEM#) |
 | U.P.C. / UPC | `upc` | Usually real 11–12 digit barcode |
-| QTY | `qty_cases` | Cases (0 OK for OOS still listed) |
+| QTY | `qty_cases` | Cases (0 OK for OOS still listed); leading `/3` → 3 |
 | DESCRIPTION | `description` + `pack_size` | Wrap lineB **or** trailing pack token on single line |
-| SSP | `ssp_per_pack` | Suggested sell |
-| PRICE | `cost_per_pack` | Wholesale — **never** NET / DISC / DEP |
-| AMOUNT | `amount` | Line extension (Akron: usually PRICE×QTY) |
-| DISC, NET (layout A) | (not mapped) | Recover blurry amount only |
+| SSP | `ssp_per_pack` | Suggested sell — **never** into cost |
+| **NET (A)** / **PRICE (B)** | **`cost_per_pack`** | Layout A: **NET** (never list PRICE when DISC/NET present). Layout B: **PRICE** |
+| AMOUNT | `amount` | Line extension (=QTY×cost) |
+| DISC (layout A) | (not mapped) | Baked into NET |
 | DEP (layout B) | (not mapped) | Deposit only |
 
 Sheet UPC column receives true UPC when present (Superior usually has it).  
-Shared 15 sheet columns unchanged — one row per line item.
+Shared sheet columns unchanged — one row per line item. Foot product sum ≈ **Total Content**, not fee-inflated Invoice Total (Parma 3749614: $1226.22 content / $1262.57 invoice).
 
 ### Detection
 
 - Header `SUPERIOR BEVERAGE` / `Superior Beverage Group`
 - Aliases: superior beverage/group; Glenwillow `diamond parkway` / `31031 diamond` (unique DC — OK for identity)
 - Akron `1267 s. main` / `(330) 535-3103` remain on the VendorSpec for extract context / weak cues, but **detect code requires letterhead NAME** on the shared Akron DC (same warehouse as Tramonte) — address/phone alone → `generic` / `no_letterhead`, not a locked `superior_beverage`
-- Customer block (ARCO / VET RETAIL OPS) is **ship-to**, not vendor
+- Customer block (ARCO / VET RETAIL OPS / Pearl Rd Parma) is **ship-to**, not vendor
 - Shared schema: optional per-line `invoice_number` (full + compact extract) for multi-invoice packets
 
 ### Gemini prompt
@@ -190,18 +194,19 @@ Built automatically:
 `build_extract_prompt(get_vendor("superior_beverage"))`
 
 = Superior `extract_rules` (dual layout) + shared schema + global rules.  
-Compact retry always keeps full `critical_rules` (PRICE≠NET/DEP, pack ownership, footer skips).
+Compact retry always keeps full `critical_rules` (layout-A NET≠list PRICE; layout-B PRICE≠DEP; pack ownership; footer skips).
 
 ### Known OCR pitfalls (Superior)
 
 1. **Dual layout** — do not invent DISC/NET on Akron DEP tickets; do not put DEP into cost.  
 2. **Wrapped pack lines (Glenwillow)** — pack_size stays with its ITEM#, not the next row.  
 3. **Pack-in-desc (Akron)** — split trailing `6PK CAN` / `18PK CANS` / `19.2OZ CAN` into pack_size.  
-4. **PRICE vs NET** — cost_per_pack = PRICE (list), never NET.  
-5. **Long thermals** — extract every product row until PAYMENT; foot near Invoice Total (ARCO sample $1844.69 / 80 cases). Sideways phone photos are harder — upright helps.  
+4. **Layout A PRICE vs NET** — cost_per_pack = **NET** (or PRICE−DISC), **never list PRICE** when DISC/NET present (barefoot 8.66 not 11.33; high noon 45.10 not 58.63).  
+5. **Long thermals** — extract every product row until PAYMENT; foot near Total Content / Invoice Total as appropriate (ARCO layout B $1844.69 / 80 cases). Sideways phone photos are harder — upright helps.  
 6. **ITEM# reuse across rows** — each physical line has its own ITEM#; never copy the previous code.  
-7. **PAYMENT / Beer$ / Cases count footers** — not product lines.  
-8. **Operator invoice #** — prefer uploader-entered value over OCR when non-empty.
+7. **PAYMENT / Beer$ / Cases count / SIN TAX / SPLIT CASE fee footers** — not product lines.  
+8. **Operator invoice #** — prefer uploader-entered value over OCR when non-empty.  
+9. **Sheet dual cohorts (Parma 3749614)** — historical list-PRICE appends may sit beside clean NET rows; default **append-only** — replace/cleanup only on explicit operator ask.
 
 ---
 

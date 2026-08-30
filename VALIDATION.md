@@ -129,6 +129,22 @@ No sheet replace (append-only). SSP harden needs `sudo systemctl restart gassnap
 
 Anchors: 15803 NET 35.18; 109582 55.95; 03004 2×23.99=47.98; 32420 10×15.99=159.90; 13753 8×28.79=230.32.
 
+## Superior Beverage — Parma layout A `20260822_003027_0c3c62bec6` (inv 3749614)
+
+| Field | Value |
+|-------|--------|
+| Photo | `uploads/20260822_003027_0c3c62bec6.jpeg` |
+| Store PIN | Parma → tab `Inv - Parma` |
+| Vendor | `superior_beverage` (forced + detect) |
+| Invoice# | **3749614** |
+| Layout | A — `ITEM#\|QTY\|DESC\|UPC\|SSP\|PRICE\|DISC\|NET\|AMOUNT` |
+| Extract (2026-08-30 re-spot) | **28** lines · sum AMOUNT **$1226.22** · Total Content **1226.22** · Invoice Total **1262.57** (fees) · **0** qty×cost MM |
+| cost policy | **NET** (not list PRICE) |
+| Anchors | barefoot qty3 cost **8.66** amt 25.98 (not list 11.33); high noon cost **45.10** (not 58.63); COORS LT 24pk qty4 cost **19.19** amt 76.76 (not 19.99) |
+| Reconcile | shared `_reconcile_qty_cost_amount` after vendor fixes: qty=3 cost=11.33 amt=25.98 → cost **8.66** |
+| Sheets | **append-only default.** Live `Inv - Parma` may hold **dual cohorts** for 3749614: dirty list-PRICE (~30 rows, barefoot 11.33 / high noon 58.63) + clean NET (~28 rows, barefoot 8.66 / high noon 45.10). Do **not** replace/delete unless operator explicitly asks cleanup for inv 3749614. |
+| Date checked | 2026-08-30 Builder |
+
 ## Superior Beverage — sample `20260727_002200_098f3e9d6e.jpeg`
 
 | Field | Value |
@@ -137,20 +153,20 @@ Anchors: 15803 NET 35.18; 109582 55.95; 03004 2×23.99=47.98; 32420 10×15.99=15
 | Vendor detect | `superior_beverage` (header SUPERIOR BEVERAGE) |
 | Forced extract | `vendor_key=superior_beverage` |
 | Result | ok, **15** line items, overall_confidence **98** |
-| Date checked | 2026-07-27 |
+| Date checked | 2026-07-27 (cost policy corrected 2026-08-22 → **NET**) |
 
 ### Example lines (spot-check vs ticket)
 
 Ticket columns: `ITEM# QTY DESCRIPTION U.P.C. SSP PRICE DISC NET AMOUNT`  
-Mapping: cost=`PRICE`, amount=`AMOUNT`, ssp=`SSP`, pack from wrapped desc line B.
+Mapping: cost=**NET** (or PRICE−DISC), amount=`AMOUNT`, ssp=`SSP`, pack from wrapped desc line B.
 
-| item_code | upc | pack_size | cost_per_pack (PRICE) | ssp_per_pack | amount | description |
-|-----------|-----|-----------|------------------------|--------------|--------|-------------|
-| 03000 | 071990170370 | STUBBY 2/12 NR | 23.19 | 13.99 | 22.39 | COORS BANQUET |
-| 03541 | 071990316006 | 24 PK CAN FLAT #104 | 19.99 | 23.99 | 19.19 | COORS LT |
-| 93048 | 635985258919 | 23.5 CN | 28.75 | 2.99 | 57.50 | MIKES HARDER MANGO |
+| item_code | upc | pack_size | cost_per_pack (**NET**) | list PRICE | ssp_per_pack | amount | description |
+|-----------|-----|-----------|-------------------------|------------|--------------|--------|-------------|
+| 03000 | 071990170370 | STUBBY 2/12 NR | **22.39** | 23.19 | 13.99 | 22.39 | COORS BANQUET |
+| 03541 | 071990316006 | 24 PK CAN FLAT #104 | **19.19** | 19.99 | 23.99 | 19.19 | COORS LT |
+| 93048 | 635985258919 | 23.5 CN | **28.75** | 28.75 | 2.99 | 57.50 | MIKES HARDER MANGO |
 
-Anchors: all three match printed PRICE (not NET), UPC, pack token, SSP, amount.
+Anchors: cost matches printed **NET** (not list PRICE when DISC present), UPC, pack token, SSP, amount.
 
 ### Store soft-warning (PIN vs ship-to)
 
@@ -180,7 +196,7 @@ Simulated upload store **Killbuck** (PIN session):
 
 `build_compact_extract_prompt` always includes (not only truncated vendor tips):
 
-- `cost_per_pack=PRICE … NEVER use NET/DISC`
+- `LAYOUT A: cost_per_pack=NET (or PRICE−DISC) — NEVER list PRICE when DISC/NET present; LAYOUT B: cost=PRICE; never DEP`
 - wrapped description → `pack_size` ownership
 - `ship_to_*` customer block
 - shared JSON shape including `ship_to_name/address/city`
