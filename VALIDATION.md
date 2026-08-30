@@ -62,7 +62,7 @@ Anchors p2: 76211 28.79; 41013 qty0 amt0; 41051 2×28.75=57.50; 46050 2×26.82=5
 | Ship-to | ARCO / 2215 East Ave Akron OH 44314 |
 | Inv | **244557** · Wed Aug 19, 2026 |
 | Vendor | OHIO BEVERAGE DISTRIBUTING · 6745 Southpointe Pkwy Brecksville |
-| Layout | `ITEM#\|QTY\|PACK\|DESC\|SSP\|PRICE\|DISC\|DEP\|EXT` |
+| Layout | **A** `ITEM#\|QTY\|PACK\|DESC\|SSP\|PRICE\|DISC\|DEP\|EXT` (no UPC) |
 | Lines | **35** |
 | Sum EXT | **$1738.62** = Total Content = Invoice Total = check |
 | Cases | **61** |
@@ -72,6 +72,24 @@ Anchors p2: 76211 28.79; 41013 qty0 amt0; 41051 2×28.75=57.50; 46050 2×26.82=5
 | Sheet | `Inv - ARCO` live 35 (list-cost noise) + **append clean 35** |
 
 First live pass used list PRICE as cost → high_line_review_rate. Fix: VendorSpec PRICE−DISC (like Lipton).
+
+## Ohio Beverage — ARCO layout B PDF `20260826_182318_49148774c1` (inv 253838)
+
+| Field | Value |
+|-------|--------|
+| Store | ARCO (PIN) |
+| Inv | **253838** · Wed Aug 26, 2026 |
+| Layout | **B** `ITEM#\|BAY\|QTY\|PCK\|DESC\|U.P.C.\|PRICE\|DISC\|DEP\|EXT` (**no SSP column**) |
+| Lines | **24** · Beer 44 cases · Total Units 404 |
+| Sum EXT | **$1398.62** = Total Content = Picksheet Total |
+| Money | cost=PRICE−DISC; QA foot **0.00**; first live OK money |
+| UPC | filled on product lines (e.g. 00557→018200201288) |
+| SSP on ticket | **absent** — blank OCR is correct |
+| SSP on sheet | Item Pack Master bridge: join A ITEM#+SSP × B ITEM#+UPC → master UPC→SSP; backfill blanks; live OCR enrich |
+| Seed pair | A `7df92c1520` + B `49148774c1` → **14** UPC/SSP seeds (58% of 253838); 10 B-only need more layout-A stops |
+| Sibling | Parma `20260826_183855_79e0de519b` inv **253711** same layout B |
+
+Do not invent SSP in extract_rules for layout B. Do not NR layout B solely for empty SSP when UPC present.
 
 ## R.L. Lipton — ARCO East Ave PDF `20260822_185810_49eed16da1`
 

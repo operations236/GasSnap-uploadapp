@@ -1,9 +1,9 @@
 # Item Pack Master (units per case)
 
-**Status:** Phase 1 live (manual fill → master tab). Phase 2 (auto lookup on OCR write) not wired yet.  
+**Status:** Phase 1 live (manual fill → master tab). **SSP bridge + blank SSP backfill + live OCR SSP enrich (2026-08-30).** Full Phase 2 qty lookup on OCR write still optional.  
 **Workbook:** DayClose-Killbuck Marathon (`1dcZufZoV7whkLiSzOkM8qarUXetrIr_KHBqusfWmb1M`)  
 **Tab:** `Item Pack Master`  
-**Locked decisions:** 2026-08-23 (operator)
+**Locked decisions:** 2026-08-23 (operator); SSP from master 2026-08-30
 
 ## Locked product rules
 
@@ -65,16 +65,32 @@ Dry-run:
 cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/upsert_item_pack_master.py --dry-run
 ```
 
-### Backfill already-ingested Inv rows (blanks only)
+### Backfill already-ingested Inv rows (blanks)
 
-Fills blank **Extracted Qty** / **Calculated Qty** / **Cost per Unit** from master UPC hit. Never overwrites filled cells. Does not invent on miss.
+Fills blank **Extracted Qty** / **Calculated Qty** / **Cost per Unit** / **SSP per Pack** / **SSP per Unit** from master UPC hit. Never overwrites filled cells. Does not invent on miss.
 
 ```bash
 cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/backfill_inv_qty_from_master.py --dry-run
 cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/backfill_inv_qty_from_master.py
+cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/backfill_inv_qty_from_master.py --ssp-only --tabs "Inv - ARCO"
 ```
 
-First run 2026-08-30: **222** cells across Killbuck/ARCO/Parma/Newcomerstown (74 ext + 74 calc + 74 cpu); 93 Superior gold kept; ~855 UPC misses (other vendors / ITEM#).
+First qty run 2026-08-30: **222** cells across Killbuck/ARCO/Parma/Newcomerstown (74 ext + 74 calc + 74 cpu); 93 Superior gold kept; ~855 UPC misses (other vendors / ITEM#).
+
+### OBD dual-layout SSP seed (ITEM# bridge)
+
+Layout A tickets print SSP (no UPC). Layout B print UPC (no SSP). Join on OBD **ITEM#** → master **UPC → SSP per Unit**.
+
+```bash
+cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/seed_obd_ssp_from_layouts.py --dry-run
+cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/seed_obd_ssp_from_layouts.py
+```
+
+Defaults: A `uploads/20260822_190933_7df92c1520.json` (244557) + B `uploads/20260826_182318_49148774c1.json` (253838) → 14 seeds. Then `--ssp-only` backfill on Inv tabs.
+
+### Live OCR SSP enrich (Wave 3)
+
+`item_pack_master.py` + `ocr.py`: after vendor fixes, blank `ssp_per_pack`/`ssp_per_unit` filled from master UPC hit (never overwrite ticket SSP; skip `abarta_coke`). Health: `item_pack_ssp_enrich=true`.
 
 3. Open tab **Item Pack Master** — confirm new UPCs, fill **Unit Name** when you care, fix Notes/CONFLICT rows.
 4. Conflict default: **keep existing Extracted Qty**, note the disagreement. Overwrite only with `--force-ext` if you intend to.
@@ -87,23 +103,19 @@ First run 2026-08-30: **222** cells across Killbuck/ARCO/Parma/Newcomerstown (74
 - Source tag: `manual_inv_killbuck_superior`
 - Upsert: blank prices fill on harvest; `--force-prices` overwrites existing Cost/SSP per Unit
 
-## Phase 2 (not built yet) — live OCR path
+## Phase 2 — live OCR path
 
 ```
-extract → normalize line items
-       → lookup Item Pack Master by UPC
-       → on hit: set extracted_qty, calculated_qty, cost_per_unit
-       → on miss: leave those blank; Needs Review = TRUE (or keep existing review flags)
-       → append sheet (extend headers with Calculated Qty, Extracted Qty on all Inv tabs)
+extract → normalize line items → vendor fixes
+       → Item Pack Master by UPC:
+            blank SSP → fill ssp_per_pack + ssp_per_unit from master (SHIPPED 2026-08-30)
+            Extracted/Calculated/Cost-per-unit from master ext (optional / not fully wired)
+       → miss: leave blank; Needs Review per vendor policy
+       → append sheet
 ```
 
-Out of scope until you say implement Phase 2:
-
-- Wiring `ocr.py` / `sheets.py`
-- Auto header upgrade on every `Inv - *` tab to 18 cols
-- Soft pack-string guesses
-- SSP per unit
-- Vendor+item_code fallback (UPC-only until product changes)
+Shipped for **SSP enrich** (`item_pack_master.enrich_line_items_ssp_from_master`).  
+Still out of scope until asked: full auto Extracted Qty on every OCR write; pack-string SoT; vendor+item_code live key.
 
 ## PDi dump (optional)
 

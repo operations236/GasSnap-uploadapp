@@ -182,18 +182,29 @@ Phone 440-746-7500.
 Driver / salesman / salesrep names (e.g. D. ESPER, J. COTTRELL, SNOWBERGER) are NOT the vendor —
 never map Esper→Esber.
 Customer / ship-to (ARCO, VET RETAIL OPS, Eagle, etc.) is NOT the vendor.
+Banner "NOT A FINAL INVOICE" still extract all product rows.
 
-COLUMN LAYOUT (left → right) on thermal picksheets (ARCO inv 244557 and similar):
+DUAL COLUMN LAYOUTS (detect which from the header row — both are OBD):
+
+LAYOUT A (SSP present, usually NO U.P.C.) — gold ARCO inv 244557:
   ITEM# | QTY | PACK | DESCRIPTION | SSP | PRICE | DISC | DEP | EXT
-
-FIELD MAPPING (critical):
-- item_code = ITEM# (keep leading zeros; e.g. 00504, 02542, 93835). REQUIRED.
+- ssp_per_pack = **SSP** column (shelf/suggested retail: 13.99, 2.49, 1.39, 12.99…). REQUIRED when printed.
+  NEVER put SSP into cost. Leave ssp blank only if the cell is truly empty on the ticket.
 - upc: usually absent — leave empty; never put ITEM# into upc.
-- qty_cases = QTY (cases ordered/shipped). NEVER use the PACK column as qty.
-- pack_size = PACK column (units in case: 2, 3, 12, 15, 24, 35, etc.) plus pack tokens from DESC (12NR, 12CAN, SUIT, 12/16OZ CAN, 5/3/25OZ CAN, 6/4CAN).
+
+LAYOUT B (U.P.C. present, usually NO SSP) — gold ARCO inv 253838:
+  ITEM# | BAY | QTY | PCK | DESCRIPTION | U.P.C. | PRICE | DISC | DEP | EXT
+- upc = **U.P.C.** barcode (keep leading zeros; e.g. 018200201288). REQUIRED when printed.
+- ssp_per_pack / ssp_per_unit: leave **empty** — this layout does not print SSP.
+  Do NOT invent SSP from memory. Downstream Item Pack Master may fill SSP by UPC.
+- BAY column = warehouse bay — ignore (not qty).
+- PCK = pack factor (like PACK on layout A) → pack_size together with DESC tokens.
+
+SHARED FIELD MAPPING (both layouts):
+- item_code = ITEM# (keep leading zeros; e.g. 00504, 02542, 93835). REQUIRED.
+- qty_cases = QTY (cases ordered/shipped). NEVER use PACK/PCK/BAY as qty.
+- pack_size = PACK or PCK column plus pack tokens from DESC (12NR, 12CAN, SUIT, 12/16OZ CAN, 5/3/25OZ CAN, 6/4CAN).
 - description = brand + pack form (BUD 12NR, BL SUIT, CW MGO MARG 6/4CAN). Abbreviations OK as printed.
-- ssp_per_pack = **SSP** column (suggested sell / retail shelf; e.g. 13.99, 2.49, 12.99).
-  NEVER put SSP into cost.
 - PRICE = list wholesale case cost BEFORE discount.
 - DISC = **per-case** dollars off PRICE (e.g. 1.60, 0.80, 4.32), not a line-total lump unless QTY=1.
 - DEP = deposit — usually 0.00; do NOT add into cost or amount unless product is deposit-only (rare).
@@ -206,29 +217,32 @@ FIELD MAPPING (critical):
   NEVER use SSP as cost.
 - amount = **EXT** (line extension). Must equal QTY × cost_per_pack (= QTY × (PRICE − DISC)).
   Example: QTY 3, PRICE 19.99, DISC 0.80 → cost 19.19, EXT 57.57.
+  Layout B example: QTY 4, PRICE 31.00, DISC 4.32 → cost 26.68, EXT 106.72.
 
 OTHER RULES:
-- Invoice# near header (e.g. 244557). Account# / Load / PO# / License are not invoice numbers.
-- Extract EVERY product ITEM# row until Cases/Bottles/Gallons footer block.
+- Invoice# near header (e.g. 244557 or 253838). Account# / Load / PO# / License are not invoice numbers.
+- Extract EVERY product ITEM# row until Cases/Bottles/Gallons/Beer footer block.
 - SKIP (not product lines): Cases/Bottles/Gallons/Kegs/Misc/Credits summary counts,
   Total Sales, Total Discount, Total Content, Total Deposit, Total Credits, Over/Short,
-  Invoice Total, PAYMENT block, signatures, service-fee banner, Final banner.
-- Foot product sum to **Total Content** / Invoice Total when equal (payment check amount).
+  Invoice Total, Picksheet Total labels, PAYMENT block, signatures, service-fee banner, Final.
+- Foot product sum to **Total Content** / Picksheet Total / Invoice Total when equal (payment check amount).
 - ship_to_* = left customer block (ARCO address), not Southpointe letterhead.
 - One JSON object per product ITEM# row only.
 """.strip(),
         critical_rules=(
             "VENDOR=Ohio Beverage Distributing (6745 Southpointe / Brecksville) — ship-to/driver NOT vendor. "
-            "COLS: ITEM#|QTY|PACK|DESC|SSP|PRICE|DISC|DEP|EXT. "
-            "item_code=ITEM# (leading zeros); upc usually empty; qty_cases=QTY not PACK; "
-            "ssp_per_pack=SSP (never cost); "
+            "DUAL LAYOUT: A=ITEM#|QTY|PACK|DESC|SSP|PRICE|DISC|DEP|EXT (ssp=SSP required when printed; upc often empty). "
+            "B=ITEM#|BAY|QTY|PCK|DESC|UPC|PRICE|DISC|DEP|EXT (upc=U.P.C.; ssp EMPTY — do not invent; BAY ignore). "
+            "item_code=ITEM# (leading zeros); qty_cases=QTY not PACK/PCK/BAY; "
             "cost_per_pack=PRICE−DISC when DISC>0 else PRICE — NEVER SSP; NEVER list PRICE if DISC nonzero; "
-            "amount=EXT (=QTY×(PRICE−DISC)). "
-            "SKIP: Cases/Bottles totals, Total Sales/Discount/Content, payment block, signatures."
+            "amount=EXT (=QTY×(PRICE−DISC)). NOT A FINAL INVOICE still extract. "
+            "SKIP: Cases/Bottles totals, Total Sales/Discount/Content, payment block, signatures. "
+            "Gold A: ARCO 244557 35/$1738.62 SSP filled. Gold B: ARCO 253838 24/$1398.62 UPC filled SSP blank."
         ),
         notes=(
-            "Killbuck validated historically; ARCO East Ave PDF 20260822_190933_7df92c1520 inv 244557 "
-            "(35 lines, Total Content $1738.62; cost=PRICE−DISC; Soft/beer+CW)."
+            "Dual layout. A: ARCO 20260822_190933_7df92c1520 inv 244557 "
+            "(35 lines, $1738.62, SSP). B: ARCO 20260826_182318_49148774c1 inv 253838 "
+            "(24 lines, $1398.62, UPC; SSP via Item Pack Master bridge)."
         ),
     ),
     VendorSpec(

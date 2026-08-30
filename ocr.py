@@ -25,6 +25,7 @@ from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 
 import vendors as vendor_registry
+import item_pack_master as item_pack
 
 _BASE = Path(__file__).resolve().parent
 load_dotenv(_BASE / ".env")
@@ -427,6 +428,24 @@ def _apply_vendor_item_fixes(vendor: Any, items: List[Dict[str, Any]]) -> None:
                 it["ssp_per_pack"] = unit
                 pack = unit
             if not pack and (
+                str(it.get("cost_per_pack") or "").strip()
+                or str(it.get("amount") or "").strip()
+                or str(it.get("item_code") or "").strip()
+            ):
+                it["needs_review"] = True
+    if vendor.key == "ohio_beverage":
+        # Layout A: SSP printed, upc usually empty → empty ssp is review-worthy.
+        # Layout B: UPC printed, no SSP column → blank ssp OK (master may fill later).
+        for it in items:
+            pack = str(it.get("ssp_per_pack") or "").strip()
+            unit = str(it.get("ssp_per_unit") or "").strip()
+            if not pack and unit:
+                it["ssp_per_pack"] = unit
+                pack = unit
+            upc = str(it.get("upc_raw") or it.get("upc") or "").strip()
+            upc_digits = re.sub(r"\D", "", upc)
+            has_barcode = len(upc_digits) >= 10
+            if not pack and not has_barcode and (
                 str(it.get("cost_per_pack") or "").strip()
                 or str(it.get("amount") or "").strip()
                 or str(it.get("item_code") or "").strip()
@@ -869,6 +888,9 @@ def extract_invoice_line_items(
                 continue
             cand_items = _normalize_line_items(cand)
             _apply_vendor_item_fixes(vendor, cand_items)
+            item_pack.enrich_line_items_ssp_from_master(
+                cand_items, vendor_key=vendor.key
+            )
             sm = _sum_line_amounts(cand_items)
             ft = _foot_target_from_extraction(cand)
             if ft is not None and ft > 0:
@@ -1240,5 +1262,7 @@ def ocr_status() -> Dict[str, Any]:
         "qa_review_rate": OCR_QA_REVIEW_RATE,
         "api_key_configured": bool(os.getenv("GEMINI_API_KEY", "").strip()),
         "skip_detect": OCR_SKIP_DETECT,
+        "qa_missing_amount_rate": OCR_QA_MISSING_AMOUNT_RATE,
+        "item_pack_ssp_enrich": True,
         "vendors": vendor_registry.list_vendors(),
     }
