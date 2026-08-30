@@ -10,10 +10,10 @@
 | # | Decision |
 |---|----------|
 | 1 | Master lives as a **Google Sheet tab** in the DayClose workbook |
-| 2 | Lookup key = **UPC only** (preserve leading zeros; sheet writes RAW) |
+| 2 | Lookup key = **UPC** for Extracted Qty (RAW zeros); **UPC + SSP Store** for SSP auto-fill (Option C — no ARCO↔Parma bleed) |
 | 3 | No master hit / cannot compute unit fields → row stays review-worthy (**Needs Review**) when Phase 2 lands |
 | 4 | **Cost per Unit** on write (Phase 2): only on master hit — prefer live `Cost per Pack ÷ Extracted Qty`; master also stores **last-seen** Cost per Unit |
-| 5 | **SSP per Unit** stored on master as last-seen reference (Superior ticket SSP is usually already unit-level → often equals SSP per Pack on Inv) |
+| 5 | **SSP per Unit** = last-seen **per store** (`SSP Store` col). Untagged SSP never auto-fills. Ticket SSP always wins when printed |
 | 6 | **Unit Name** documented on master rows over time (6pk / bottle / can / 15pk / …) |
 | 7 | Build path: manual Extracted Qty on Inv tabs → upsert script → later live lookup |
 | 8 | Optional PDi dump later to seed/compare — not required to start |
@@ -34,7 +34,8 @@
 | Extracted Qty | Units per case (gold) |
 | Unit Name | What “unit” means for this SKU (operator-maintained) |
 | Cost per Unit | Last-seen wholesale per unit (reference) |
-| SSP per Unit | Last-seen suggested retail per unit (reference) |
+| SSP per Unit | Last-seen suggested retail per unit (**per SSP Store**) |
+| SSP Store | PIN store that owns SSP last-seen (Option C). Empty → no auto SSP fill |
 | Description | Last seen (info) |
 | Pack Size Example | Last seen pack string (info) |
 | Vendor Example | Last seen vendor (info only — **not** part of match key) |
@@ -77,16 +78,16 @@ cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/backfill_inv_qty_fr
 
 First qty run 2026-08-30: **222** cells across Killbuck/ARCO/Parma/Newcomerstown (74 ext + 74 calc + 74 cpu); 93 Superior gold kept; ~855 UPC misses (other vendors / ITEM#).
 
-### OBD dual-layout SSP seed (ITEM# bridge)
+### OBD dual-layout SSP seed (ITEM# bridge) + store scope
 
-Layout A tickets print SSP (no UPC). Layout B print UPC (no SSP). Join on OBD **ITEM#** → master **UPC → SSP per Unit**.
+Layout A tickets print SSP (no UPC). Layout B print UPC (no SSP). Join on OBD **ITEM#** → master **UPC → SSP per Unit** tagged **SSP Store** (default ARCO for the gold pair).
 
 ```bash
 cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/seed_obd_ssp_from_layouts.py --dry-run
-cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/seed_obd_ssp_from_layouts.py
+cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/seed_obd_ssp_from_layouts.py --store ARCO
 ```
 
-Defaults: A `uploads/20260822_190933_7df92c1520.json` (244557) + B `uploads/20260826_182318_49148774c1.json` (253838) → 14 seeds. Then `--ssp-only` backfill on Inv tabs.
+**Option C:** live OCR + backfill fill blank SSP only when `SSP Store` matches PIN/tab store. Parma never gets ARCO-tagged SSP. Untagged master SSP → no auto-fill.
 
 ### Live OCR SSP enrich (Wave 3)
 

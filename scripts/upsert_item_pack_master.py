@@ -61,6 +61,7 @@ HEADERS = [
     "Unit Name",
     "Cost per Unit",
     "SSP per Unit",
+    "SSP Store",
     "Description",
     "Pack Size Example",
     "Vendor Example",
@@ -140,6 +141,7 @@ def _ensure_master(sh: gspread.Spreadsheet) -> gspread.Worksheet:
                         get("Unit Name"),
                         get("Cost per Unit"),
                         get("SSP per Unit"),
+                        get("SSP Store"),
                         get("Description"),
                         get("Pack Size Example"),
                         get("Vendor Example"),
@@ -190,6 +192,7 @@ def _load_master(ws: gspread.Worksheet) -> Tuple[List[str], Dict[str, Dict[str, 
             "unit": cell(rr, "Unit Name"),
             "cpu": cell(rr, "Cost per Unit"),
             "sspu": cell(rr, "SSP per Unit"),
+            "ssp_store": cell(rr, "SSP Store"),
             "desc": cell(rr, "Description"),
             "pack": cell(rr, "Pack Size Example"),
             "vendor": cell(rr, "Vendor Example"),
@@ -223,6 +226,10 @@ def _harvest_tab(ws: gspread.Worksheet) -> List[Dict[str, str]]:
             return ""
         return str(rr[i]).strip()
 
+    # Option C: SSP Store from Inv tab name
+    tab = ws.title
+    store = tab[6:].strip() if tab.lower().startswith("inv - ") else tab
+
     found: List[Dict[str, str]] = []
     for r in values[1:]:
         rr = r + [""] * 32
@@ -239,7 +246,6 @@ def _harvest_tab(ws: gspread.Worksheet) -> List[Dict[str, str]]:
 
         if cpu_n is None and cpp_n is not None and ext_n:
             cpu_n = cpp_n / ext_n
-        # Ticket SSP is usually already per sell-unit; only fall back to pack col as-is
         if sspu_n is None and ssp_p_n is not None:
             sspu_n = ssp_p_n
 
@@ -249,6 +255,7 @@ def _harvest_tab(ws: gspread.Worksheet) -> List[Dict[str, str]]:
                 "ext": ext,
                 "cpu": _fmt_money(cpu_n),
                 "sspu": _fmt_money(sspu_n),
+                "ssp_store": store if _fmt_money(sspu_n) else "",
                 "desc": cell(rr, "Description"),
                 "pack": cell(rr, "Pack Size"),
                 "vendor": cell(rr, "Vendor"),
@@ -294,6 +301,7 @@ def upsert(
                 "unit": "",
                 "cpu": h.get("cpu") or "",
                 "sspu": h.get("sspu") or "",
+                "ssp_store": h.get("ssp_store") or "",
                 "desc": h["desc"],
                 "pack": h["pack"],
                 "vendor": h["vendor"],
@@ -317,12 +325,28 @@ def upsert(
             cur["vendor"] = h["vendor"]
 
         # prices: fill blanks always; overwrite only with --force-prices
+        # SSP store-scoped (Option C): only write ssp when store matches or master ssp empty
         if h.get("cpu"):
             if force_prices or not str(cur.get("cpu") or "").strip():
                 cur["cpu"] = h["cpu"]
         if h.get("sspu"):
-            if force_prices or not str(cur.get("sspu") or "").strip():
+            cur_store = str(cur.get("ssp_store") or "").strip()
+            new_store = str(h.get("ssp_store") or "").strip()
+            if force_prices:
                 cur["sspu"] = h["sspu"]
+                if new_store:
+                    cur["ssp_store"] = new_store
+            elif not str(cur.get("sspu") or "").strip():
+                cur["sspu"] = h["sspu"]
+                if new_store:
+                    cur["ssp_store"] = new_store
+            elif new_store and cur_store.casefold() == new_store.casefold():
+                # same store may refresh blank only already handled; keep value unless force
+                if not cur_store and new_store:
+                    cur["ssp_store"] = new_store
+            elif new_store and not cur_store:
+                cur["ssp_store"] = new_store
+            # else different store owns SSP — leave alone
 
         cur_ext = _norm_ext(str(cur.get("ext") or "")) or str(cur.get("ext") or "").strip()
         if cur_ext != h["ext"]:
@@ -349,6 +373,7 @@ def upsert(
                 str(d.get("unit") or ""),
                 str(d.get("cpu") or ""),
                 str(d.get("sspu") or ""),
+                str(d.get("ssp_store") or ""),
                 str(d.get("desc") or ""),
                 str(d.get("pack") or ""),
                 str(d.get("vendor") or ""),

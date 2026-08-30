@@ -888,9 +888,7 @@ def extract_invoice_line_items(
                 continue
             cand_items = _normalize_line_items(cand)
             _apply_vendor_item_fixes(vendor, cand_items)
-            item_pack.enrich_line_items_ssp_from_master(
-                cand_items, vendor_key=vendor.key
-            )
+            # SSP master fill is store-scoped (Option C) — applied in process_upload_ocr
             sm = _sum_line_amounts(cand_items)
             ft = _foot_target_from_extraction(cand)
             if ft is not None and ft > 0:
@@ -1173,6 +1171,21 @@ def process_upload_ocr(
             qa.get("overall_confidence"),
         )
 
+        # Option C: SSP from master only when tagged for this PIN store
+        try:
+            lines = list(extraction.get("line_items") or [])
+            n_ssp = item_pack.enrich_line_items_ssp_from_master(
+                lines,
+                vendor_key=str(extraction.get("vendor_key") or ""),
+                store=upload_store,
+            )
+            if n_ssp:
+                extraction = dict(extraction)
+                extraction["line_items"] = lines
+                extraction["ssp_master_filled"] = n_ssp
+        except Exception as e:
+            logger.warning("OCR SSP master enrich soft-fail: %s", e)
+
         line_items = line_items_for_sheets(extraction)
         inv_no = (invoice_number or "").strip() or str(extraction.get("invoice_number") or "").strip()
         inv_date = (invoice_date or "").strip() or str(extraction.get("invoice_date") or "").strip()
@@ -1264,5 +1277,6 @@ def ocr_status() -> Dict[str, Any]:
         "skip_detect": OCR_SKIP_DETECT,
         "qa_missing_amount_rate": OCR_QA_MISSING_AMOUNT_RATE,
         "item_pack_ssp_enrich": True,
+        "item_pack_ssp_store_scoped": True,
         "vendors": vendor_registry.list_vendors(),
     }

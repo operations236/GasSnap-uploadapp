@@ -1,8 +1,11 @@
 """
-Item Pack Master lookup (UPC → last-seen pack/SSP).
+Item Pack Master lookup (UPC → pack; UPC+Store → SSP).
 
 Shared by OCR live enrich, backfill scripts, and seed tools.
-Match key = UPC only (leading zeros preserved). Fail soft — never raise into upload path.
+- Extracted Qty: match key = UPC only
+- SSP: match key = UPC + source store (Option C — no cross-store bleed).
+  Empty SSP Store on master → do not auto-fill SSP (legacy untagged).
+Fail soft — never raise into upload path.
 """
 
 from __future__ import annotations
@@ -36,12 +39,14 @@ SCOPES = (
     "https://www.googleapis.com/auth/drive",
 )
 
-# Process cache (OCR may hit master once per upload; TTL avoids sheet spam)
 _cache_lock = threading.Lock()
 _cache_at = 0.0
-_cache_ssp: Dict[str, str] = {}
+# upc -> ssp string only when we ignore store (legacy callers) — prefer store map
+_cache_ssp_meta: Dict[str, Dict[str, str]] = {}  # upc -> {ssp, store}
 _cache_ext: Dict[str, str] = {}
 _CACHE_TTL = float(os.getenv("ITEM_PACK_CACHE_TTL", "300"))
+
+SSP_MASTER_SKIP_VENDORS = frozenset({"abarta_coke"})
 
 
 def _digits(upc: str) -> str:
@@ -49,8 +54,20 @@ def _digits(upc: str) -> str:
 
 
 def normalize_upc_key(upc: str) -> str:
-    """Prefer full RAW string; also index by digits-only for loose match."""
     return str(upc or "").strip()
+
+
+def normalize_store(store: str) -> str:
+    """PIN/session store name; casefold strip. Empty → no SSP match."""
+    return str(store or "").strip().casefold()
+
+
+def store_from_inv_tab(tab_title: str) -> str:
+    """'Inv - ARCO' → 'ARCO'."""
+    t = str(tab_title or "").strip()
+    if t.lower().startswith("inv - "):
+        return t[6:].strip()
+    return t
 
 
 def _client():
@@ -90,30 +107,39 @@ def _norm_ext(raw: Any) -> str:
     return str(v)
 
 
+def _index_upc(dst_meta: Dict[str, Dict[str, str]], dst_ext: Dict[str, str], upc: str, ssp: str, store: str, ext: str) -> None:
+    if not upc:
+        return
+    keys = [upc]
+    d = _digits(upc)
+    if d and d != upc:
+        keys.append(d)
+    for k in keys:
+        if ssp:
+            # First wins for duplicate UPC rows
+            if k not in dst_meta:
+                dst_meta[k] = {"ssp": ssp, "store": store}
+        if ext and k not in dst_ext:
+            dst_ext[k] = ext
+
+
 def fetch_master_maps(
     *,
     sheet_id: str = "",
     force: bool = False,
-) -> Tuple[Dict[str, str], Dict[str, str]]:
+) -> Tuple[Dict[str, Dict[str, str]], Dict[str, str]]:
     """
-    Return (ssp_by_upc, ext_by_upc).
-    Keys include RAW UPC and digits-only form when different.
-    Active=FALSE rows skipped.
+    Return (ssp_meta_by_upc, ext_by_upc).
+    ssp_meta value: {"ssp": "13.99", "store": "ARCO"} (store may be "").
+    Active=FALSE skipped.
     """
-    global _cache_at, _cache_ssp, _cache_ext
+    global _cache_at, _cache_ssp_meta, _cache_ext
     now = time.time()
     with _cache_lock:
-        if (
-            not force
-            and _cache_ssp is not None
-            and (now - _cache_at) < _CACHE_TTL
-            and (_cache_ssp or _cache_ext or _cache_at > 0)
-        ):
-            # Allow empty cache only if we successfully loaded recently
-            if _cache_at > 0:
-                return dict(_cache_ssp), dict(_cache_ext)
+        if not force and _cache_at > 0 and (now - _cache_at) < _CACHE_TTL:
+            return {k: dict(v) for k, v in _cache_ssp_meta.items()}, dict(_cache_ext)
 
-    ssp: Dict[str, str] = {}
+    ssp_meta: Dict[str, Dict[str, str]] = {}
     ext: Dict[str, str] = {}
     sid = (sheet_id or DEFAULT_SHEET_ID).strip()
     try:
@@ -133,8 +159,14 @@ def fetch_master_maps(
                 i_ssp = col.get("SSP per Unit")
                 i_ext = col.get("Extracted Qty")
                 i_act = col.get("Active")
+                # Option C store tag (new); fall back to nothing if missing
+                i_ss = None
+                for name in ("SSP Store", "SSP Source Store", "Store Example"):
+                    if name in col:
+                        i_ss = col[name]
+                        break
                 for r in values[1:]:
-                    rr = r + [""] * 20
+                    rr = r + [""] * 24
                     upc = str(rr[i_upc]).strip()
                     if not upc:
                         continue
@@ -144,51 +176,55 @@ def fetch_master_maps(
                             continue
                     ssp_s = _fmt_ssp(rr[i_ssp]) if i_ssp is not None else ""
                     ext_s = _norm_ext(rr[i_ext]) if i_ext is not None else ""
-                    if ssp_s:
-                        ssp[upc] = ssp_s
-                        d = _digits(upc)
-                        if d and d not in ssp:
-                            ssp[d] = ssp_s
-                    if ext_s:
-                        ext[upc] = ext_s
-                        d = _digits(upc)
-                        if d and d not in ext:
-                            ext[d] = ext_s
+                    store_s = str(rr[i_ss]).strip() if i_ss is not None else ""
+                    _index_upc(ssp_meta, ext, upc, ssp_s, store_s, ext_s)
         with _cache_lock:
-            _cache_ssp = dict(ssp)
+            _cache_ssp_meta = {k: dict(v) for k, v in ssp_meta.items()}
             _cache_ext = dict(ext)
             _cache_at = time.time()
+        tagged = sum(1 for v in ssp_meta.values() if v.get("store") and v.get("ssp"))
         logger.info(
-            "Item Pack Master loaded ssp=%d ext=%d sheet=%s",
-            len(ssp),
+            "Item Pack Master loaded ssp_meta=%d ssp_store_tagged=%d ext=%d",
+            len(ssp_meta),
+            tagged,
             len(ext),
-            sid[:8],
         )
     except Exception as e:
         logger.warning("Item Pack Master load failed (soft): %s", e)
         with _cache_lock:
-            # Keep prior cache if any
             if _cache_at > 0 and not force:
-                return dict(_cache_ssp), dict(_cache_ext)
-            _cache_at = time.time()  # negative cache brief
-            _cache_ssp = {}
+                return {k: dict(v) for k, v in _cache_ssp_meta.items()}, dict(_cache_ext)
+            _cache_at = time.time()
+            _cache_ssp_meta = {}
             _cache_ext = {}
         return {}, {}
 
-    return ssp, ext
+    return ssp_meta, ext
 
 
-def lookup_ssp(upc: str, ssp_map: Optional[Mapping[str, str]] = None) -> str:
+def lookup_ssp(
+    upc: str,
+    store: str = "",
+    ssp_meta: Optional[Mapping[str, Mapping[str, str]]] = None,
+) -> str:
+    """
+    SSP only when master row is tagged with the same store (Option C).
+    Untagged master SSP (empty SSP Store) never auto-fills.
+    """
     if not upc:
         return ""
-    m = ssp_map if ssp_map is not None else fetch_master_maps()[0]
+    want = normalize_store(store)
+    if not want:
+        return ""
+    meta = ssp_meta if ssp_meta is not None else fetch_master_maps()[0]
     u = normalize_upc_key(upc)
-    if u in m:
-        return m[u]
-    d = _digits(u)
-    if d and d in m:
-        return m[d]
-    return ""
+    row = meta.get(u) or meta.get(_digits(u))
+    if not row:
+        return ""
+    got_store = normalize_store(str(row.get("store") or ""))
+    if not got_store or got_store != want:
+        return ""
+    return str(row.get("ssp") or "").strip()
 
 
 def lookup_ext(upc: str, ext_map: Optional[Mapping[str, str]] = None) -> str:
@@ -210,30 +246,34 @@ def invalidate_cache() -> None:
         _cache_at = 0.0
 
 
-# Vendors that must keep SSP empty even if master has a value
-SSP_MASTER_SKIP_VENDORS = frozenset({"abarta_coke"})
-
-
 def enrich_line_items_ssp_from_master(
     items: list,
     *,
     vendor_key: str = "",
-    ssp_map: Optional[Mapping[str, str]] = None,
+    store: str = "",
+    ssp_meta: Optional[Mapping[str, Mapping[str, str]]] = None,
 ) -> int:
     """
-    Fill blank ssp_per_pack / ssp_per_unit from master UPC hit.
-    Never overwrites non-blank ticket SSP. Returns count of lines filled.
+    Fill blank ssp_per_pack / ssp_per_unit from master UPC+store hit.
+    Never overwrites non-blank ticket SSP. Requires store (Option C).
     """
     if (vendor_key or "").strip() in SSP_MASTER_SKIP_VENDORS:
         return 0
     if not items:
         return 0
+    if not normalize_store(store):
+        logger.debug("SSP enrich skipped: no store")
+        return 0
     try:
-        m = dict(ssp_map) if ssp_map is not None else fetch_master_maps()[0]
+        meta = (
+            {k: dict(v) for k, v in ssp_meta.items()}
+            if ssp_meta is not None
+            else fetch_master_maps()[0]
+        )
     except Exception as e:
         logger.warning("SSP master enrich skipped: %s", e)
         return 0
-    if not m:
+    if not meta:
         return 0
 
     filled = 0
@@ -250,31 +290,27 @@ def enrich_line_items_ssp_from_master(
         if unit and not pack:
             it["ssp_per_pack"] = unit
             continue
-        # both blank — try master
-        upc = str(it.get("upc_raw") or it.get("upc") or "").strip()
-        # Prefer barcode-looking field
         raw = str(it.get("upc_raw") or "").strip()
         sheet_u = str(it.get("upc") or "").strip()
         cand = raw if _digits(raw) and len(_digits(raw)) >= 10 else sheet_u
         if not cand or len(_digits(cand)) < 10:
-            # item_code-only rows (layout A OBD) — no UPC key
             continue
-        ssp = lookup_ssp(cand, m)
+        ssp = lookup_ssp(cand, store=store, ssp_meta=meta)
         if not ssp:
-            # try other field
             other = sheet_u if cand == raw else raw
             if other and other != cand:
-                ssp = lookup_ssp(other, m)
+                ssp = lookup_ssp(other, store=store, ssp_meta=meta)
         if not ssp:
             continue
         it["ssp_per_pack"] = ssp
         it["ssp_per_unit"] = ssp
-        it["ssp_source"] = "item_pack_master"
+        it["ssp_source"] = f"item_pack_master:{normalize_store(store)}"
         filled += 1
     if filled:
         logger.info(
-            "Item Pack Master SSP enrich filled=%d vendor=%s",
+            "Item Pack Master SSP enrich filled=%d vendor=%s store=%s",
             filled,
             vendor_key or "-",
+            store or "-",
         )
     return filled

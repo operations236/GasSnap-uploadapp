@@ -101,7 +101,7 @@ def _blank(s: Any) -> bool:
 
 
 def _load_master(sh: gspread.Spreadsheet) -> Dict[str, Dict[str, str]]:
-    """UPC -> {ext, ssp}. Active rows only when Active col present. ext and/or ssp may be set."""
+    """UPC -> {ext, ssp, ssp_store}. Active rows only when Active col present."""
     try:
         ws = sh.worksheet(MASTER_TAB)
     except gspread.exceptions.WorksheetNotFound:
@@ -116,7 +116,7 @@ def _load_master(sh: gspread.Spreadsheet) -> Dict[str, Dict[str, str]]:
     by: Dict[str, Dict[str, str]] = {}
     skipped_inactive = 0
     for r in values[1:]:
-        rr = r + [""] * 20
+        rr = r + [""] * 24
         upc = str(rr[col["UPC"]]).strip()
         if not upc:
             continue
@@ -136,23 +136,34 @@ def _load_master(sh: gspread.Spreadsheet) -> Dict[str, Dict[str, str]]:
                 ssp = f"{v:.2f}" if abs(v - round(v, 2)) < 1e-9 else str(v)
             except ValueError:
                 ssp = ssp_raw
+        ssp_store = ""
+        if "SSP Store" in col:
+            ssp_store = str(rr[col["SSP Store"]]).strip()
         if ext is None and not ssp:
             continue
-        # Prefer first; if duplicate UPC later, keep first gold
         if upc not in by:
-            by[upc] = {"ext": ext or "", "ssp": ssp}
+            by[upc] = {"ext": ext or "", "ssp": ssp, "ssp_store": ssp_store}
         else:
             if not by[upc].get("ext") and ext:
                 by[upc]["ext"] = ext
             if not by[upc].get("ssp") and ssp:
                 by[upc]["ssp"] = ssp
+                by[upc]["ssp_store"] = ssp_store
     n_ext = sum(1 for v in by.values() if v.get("ext"))
     n_ssp = sum(1 for v in by.values() if v.get("ssp"))
+    n_tag = sum(1 for v in by.values() if v.get("ssp") and v.get("ssp_store"))
     print(
-        f"master loaded: {len(by)} UPCs ext={n_ext} ssp={n_ssp} "
+        f"master loaded: {len(by)} UPCs ext={n_ext} ssp={n_ssp} ssp_store_tagged={n_tag} "
         f"(skipped_inactive={skipped_inactive})"
     )
     return by
+
+
+def _tab_store(ws_title: str) -> str:
+    t = (ws_title or "").strip()
+    if t.lower().startswith("inv - "):
+        return t[6:].strip()
+    return t
 
 
 def _inv_tabs(sh: gspread.Spreadsheet, only: Optional[Sequence[str]]) -> List[gspread.Worksheet]:
@@ -203,6 +214,9 @@ def backfill_tab(
     if do_qty:
         header = _ensure_qty_headers(ws, header, dry_run=dry_run)
 
+    tab_store = _tab_store(ws.title)
+    tab_store_cf = tab_store.casefold()
+
     i_upc = _col_index(header, "UPC")
     i_cases = _col_index(header, "Qty (Cases)", "Qty")
     i_cpp = _col_index(header, "Cost per Pack")
@@ -251,6 +265,12 @@ def backfill_tab(
         stats["master_hit"] += 1
         ext_m = mrow.get("ext") or ""
         ssp_m = mrow.get("ssp") or ""
+        ssp_store = (mrow.get("ssp_store") or "").strip()
+        # Option C: SSP only when master SSP Store matches this Inv tab store
+        if do_ssp and ssp_m:
+            if not ssp_store or ssp_store.casefold() != tab_store_cf:
+                stats["skip_ssp_store_mismatch"] += 1
+                ssp_m = ""
         row_did_fill = False
         effective_ext_s = ext_m
         effective_ext = float(ext_m) if ext_m else 0.0
@@ -355,7 +375,7 @@ def backfill_tab(
                 f"ssp={ssp_m or '-'} inv={invn} {vend}"
             )
 
-    print(f"\n=== {ws.title} ===")
+    print(f"\n=== {ws.title} (store={tab_store!r}) ===")
     print(f"  rows_with_upc={stats['rows_with_upc']} hit={stats['master_hit']} miss={stats['master_miss']}")
     print(
         f"  fill extracted={stats['fill_extracted']} calculated={stats['fill_calculated']} "
@@ -368,7 +388,7 @@ def backfill_tab(
     print(
         f"  skip calc_no_cases={stats['skip_calc_no_cases']} cpu_no_pack={stats['skip_cpu_no_pack']} "
         f"no_upc_row={stats['skip_no_upc']} qty_no_ext={stats['skip_qty_no_master_ext']} "
-        f"ssp_no_m={stats['skip_ssp_no_master']}"
+        f"ssp_no_m={stats['skip_ssp_no_master']} ssp_store_mis={stats['skip_ssp_store_mismatch']}"
     )
     print(f"  cell updates queued={len(updates)} dry_run={dry_run}")
     if samples_fill:

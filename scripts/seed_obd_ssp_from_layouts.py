@@ -60,6 +60,7 @@ HEADERS = [
     "Unit Name",
     "Cost per Unit",
     "SSP per Unit",
+    "SSP Store",  # Option C: store that owns this SSP last-seen
     "Description",
     "Pack Size Example",
     "Vendor Example",
@@ -74,6 +75,7 @@ DEFAULT_A = BASE_DIR / "uploads" / "20260822_190933_7df92c1520.json"
 DEFAULT_B = BASE_DIR / "uploads" / "20260826_182318_49148774c1.json"
 VENDOR = "Ohio Beverage Distributing"
 SOURCE = "obd_layout_ab_bridge"
+DEFAULT_STORE = "ARCO"
 
 
 def _client() -> gspread.Client:
@@ -207,6 +209,7 @@ def _load_master(ws: gspread.Worksheet) -> Dict[str, Dict[str, Any]]:
             "unit": cell(rr, "Unit Name"),
             "cpu": cell(rr, "Cost per Unit"),
             "sspu": cell(rr, "SSP per Unit"),
+            "ssp_store": cell(rr, "SSP Store"),
             "desc": cell(rr, "Description"),
             "pack": cell(rr, "Pack Size Example"),
             "vendor": cell(rr, "Vendor Example"),
@@ -225,13 +228,15 @@ def apply_seeds(
     *,
     force_prices: bool,
     source: str,
+    store: str,
 ) -> Dict[str, int]:
     now = datetime.now(EASTERN).strftime("%Y-%m-%d %H:%M:%S %Z")
-    st = {"added": 0, "ssp_fill": 0, "ssp_keep": 0, "ssp_force": 0, "meta": 0}
+    st = {"added": 0, "ssp_fill": 0, "ssp_keep": 0, "ssp_force": 0, "ssp_store_tag": 0, "meta": 0}
+    store = (store or DEFAULT_STORE).strip()
     for s in seeds:
         upc = s["upc"]
         ssp = s["sspu"]
-        note_bit = f"OBD ITEM#{s.get('item_code')};"
+        note_bit = f"OBD ITEM#{s.get('item_code')} store={store};"
         if upc not in by_upc:
             by_upc[upc] = {
                 "upc": upc,
@@ -239,6 +244,7 @@ def apply_seeds(
                 "unit": "",
                 "cpu": "",
                 "sspu": ssp,
+                "ssp_store": store,
                 "desc": s.get("desc") or "",
                 "pack": s.get("pack") or "",
                 "vendor": s.get("vendor") or VENDOR,
@@ -250,6 +256,7 @@ def apply_seeds(
             }
             st["added"] += 1
             st["ssp_fill"] += 1
+            st["ssp_store_tag"] += 1
             continue
         cur = by_upc[upc]
         cur["hit"] = int(cur.get("hit") or 0) + 1
@@ -264,16 +271,33 @@ def apply_seeds(
         if note_bit not in prev_notes:
             cur["notes"] = (prev_notes + " " + note_bit).strip()
         cur_ssp = _fmt_ssp(cur.get("sspu") or "")
+        cur_store = str(cur.get("ssp_store") or "").strip()
         if force_prices:
             cur["sspu"] = ssp
+            cur["ssp_store"] = store
             st["ssp_force"] += 1
+            st["ssp_store_tag"] += 1
             cur["source"] = source + "+force_prices"
         elif not cur_ssp:
             cur["sspu"] = ssp
+            cur["ssp_store"] = store
             st["ssp_fill"] += 1
+            st["ssp_store_tag"] += 1
             if not cur.get("source") or cur.get("source") == "manual":
                 cur["source"] = source
         else:
+            # Keep existing SSP value; still tag store if blank or same store
+            if not cur_store:
+                cur["ssp_store"] = store
+                st["ssp_store_tag"] += 1
+            elif cur_store.casefold() == store.casefold():
+                # same store — optional refresh ssp only if force (already handled)
+                pass
+            else:
+                # different store owns SSP — do not overwrite (Option C); note only
+                note2 = f"SKIP ssp seed {store} kept {cur_store};"
+                if note2 not in (cur.get("notes") or ""):
+                    cur["notes"] = ((cur.get("notes") or "") + " " + note2).strip()
             st["ssp_keep"] += 1
         st["meta"] += 1
     return st
@@ -290,6 +314,7 @@ def write_master(ws: gspread.Worksheet, by_upc: Dict[str, Dict[str, Any]], sourc
                 str(d.get("unit") or ""),
                 str(d.get("cpu") or ""),
                 str(d.get("sspu") or ""),
+                str(d.get("ssp_store") or ""),
                 str(d.get("desc") or ""),
                 str(d.get("pack") or ""),
                 str(d.get("vendor") or ""),
@@ -301,10 +326,8 @@ def write_master(ws: gspread.Worksheet, by_upc: Dict[str, Dict[str, Any]], sourc
             ]
         )
     values = ws.get_all_values() or []
-    # Ensure header
-    if not values or [c.strip() for c in values[0]] != HEADERS:
-        ws.update(values=[HEADERS], range_name="A1", value_input_option="RAW")
-        values = [HEADERS]
+    # Always rewrite header to HEADERS (migrates SSP Store col)
+    ws.update(values=[HEADERS], range_name="A1", value_input_option="RAW")
     if len(values) > 1:
         ws.delete_rows(2, len(values))
     if out_rows:
@@ -317,6 +340,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     p.add_argument("--sheet-id", default=DEFAULT_SHEET_ID)
     p.add_argument("--layout-a", default=str(DEFAULT_A), help="JSON with SSP (layout A)")
     p.add_argument("--layout-b", default=str(DEFAULT_B), help="JSON with UPC (layout B)")
+    p.add_argument(
+        "--store",
+        default=DEFAULT_STORE,
+        help="PIN store that owns these SSP values (Option C; default ARCO)",
+    )
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--force-prices", action="store_true")
     p.add_argument("--source", default=SOURCE)
@@ -331,7 +359,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     seeds, st = _bridge(path_a, path_b)
     print("=== OBD layout A+B bridge ===")
-    print(f"A={path_a.name} B={path_b.name}")
+    print(f"A={path_a.name} B={path_b.name} store={args.store}")
     for k in sorted(st):
         print(f"  {k}={st[k]}")
     print(f"seeds={len(seeds)}")
@@ -350,18 +378,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     by_upc = _load_master(ws)
     print(f"master before={len(by_upc)}")
     apply_st = apply_seeds(
-        by_upc, seeds, force_prices=args.force_prices, source=args.source
+        by_upc,
+        seeds,
+        force_prices=args.force_prices,
+        source=args.source,
+        store=args.store,
     )
     print(
         f"apply added={apply_st['added']} ssp_fill={apply_st['ssp_fill']} "
         f"ssp_keep={apply_st['ssp_keep']} ssp_force={apply_st['ssp_force']} "
+        f"ssp_store_tag={apply_st['ssp_store_tag']} "
         f"master_after={len(by_upc)} dry_run={args.dry_run}"
     )
     if args.dry_run:
         return 0
     n = write_master(ws, by_upc, args.source)
     print(f"wrote {n} rows → '{MASTER_TAB}'")
-    # Invalidate OCR cache if importable
     try:
         sys.path.insert(0, str(BASE_DIR))
         import item_pack_master as ipm
