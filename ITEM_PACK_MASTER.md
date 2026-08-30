@@ -65,6 +65,17 @@ Dry-run:
 cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/upsert_item_pack_master.py --dry-run
 ```
 
+### Backfill already-ingested Inv rows (blanks only)
+
+Fills blank **Extracted Qty** / **Calculated Qty** / **Cost per Unit** from master UPC hit. Never overwrites filled cells. Does not invent on miss.
+
+```bash
+cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/backfill_inv_qty_from_master.py --dry-run
+cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/backfill_inv_qty_from_master.py
+```
+
+First run 2026-08-30: **222** cells across Killbuck/ARCO/Parma/Newcomerstown (74 ext + 74 calc + 74 cpu); 93 Superior gold kept; ~855 UPC misses (other vendors / ITEM#).
+
 3. Open tab **Item Pack Master** — confirm new UPCs, fill **Unit Name** when you care, fix Notes/CONFLICT rows.
 4. Conflict default: **keep existing Extracted Qty**, note the disagreement. Overwrite only with `--force-ext` if you intend to.
 

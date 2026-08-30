@@ -1,0 +1,355 @@
+#!/usr/bin/env python3
+"""
+Backfill blank Inv qty/unit columns from Item Pack Master (UPC key).
+
+Fills ONLY blank cells (never overwrites operator-filled values):
+  - Extracted Qty  ← master Extracted Qty (units/case)
+  - Calculated Qty ← Qty (Cases) × Extracted Qty  (when cases + ext available)
+  - Cost per Unit  ← Cost per Pack ÷ Extracted Qty (when pack cost + ext available)
+
+Does NOT touch SSP per Unit (Phase 2 out of scope).
+Does NOT invent values on master miss.
+Does NOT delete/replace whole rows — cell-level updates only.
+
+Workbook default: DayClose-Killbuck Marathon (INVOICE_WORKBOOK_ID).
+
+Usage:
+  ./venv/bin/python scripts/backfill_inv_qty_from_master.py --dry-run
+  ./venv/bin/python scripts/backfill_inv_qty_from_master.py
+  ./venv/bin/python scripts/backfill_inv_qty_from_master.py --tabs "Inv - Killbuck"
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+import time
+from collections import defaultdict
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+
+import gspread
+from google.oauth2.service_account import Credentials
+from gspread.utils import rowcol_to_a1
+
+DEFAULT_SHEET_ID = os.getenv(
+    "INVOICE_WORKBOOK_ID", "1dcZufZoV7whkLiSzOkM8qarUXetrIr_KHBqusfWmb1M"
+)
+MASTER_TAB = "Item Pack Master"
+BASE_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_CREDS = Path(
+    os.getenv(
+        "GOOGLE_CREDENTIALS",
+        str(Path.home() / ".openclaw" / "google-credentials.json"),
+    )
+)
+if not DEFAULT_CREDS.is_file():
+    DEFAULT_CREDS = BASE_DIR / "google-credentials.json"
+
+SCOPES = (
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+)
+
+# Batch size for Sheets API value updates
+BATCH_CHUNK = 400
+
+
+def _client() -> gspread.Client:
+    if not DEFAULT_CREDS.is_file():
+        raise SystemExit(f"Credentials not found: {DEFAULT_CREDS}")
+    creds = Credentials.from_service_account_file(str(DEFAULT_CREDS), scopes=list(SCOPES))
+    return gspread.authorize(creds)
+
+
+def _fnum(raw: Any) -> Optional[float]:
+    s = str(raw or "").strip().replace(",", "").replace("$", "")
+    if not s:
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _norm_ext(raw: Any) -> Optional[str]:
+    v = _fnum(raw)
+    if v is None:
+        return None
+    if abs(v - round(v)) < 1e-9:
+        return str(int(round(v)))
+    return str(v)
+
+
+def _fmt_money(v: float) -> str:
+    if abs(v - round(v, 2)) < 1e-9:
+        return f"{v:.2f}"
+    return f"{v:.10f}".rstrip("0").rstrip(".")
+
+
+def _fmt_qty(v: float) -> str:
+    if abs(v - round(v)) < 1e-9:
+        return str(int(round(v)))
+    return f"{v:.6f}".rstrip("0").rstrip(".")
+
+
+def _blank(s: Any) -> bool:
+    return not str(s or "").strip()
+
+
+def _load_master(sh: gspread.Spreadsheet) -> Dict[str, str]:
+    """UPC -> Extracted Qty (string). Active rows only when Active col present."""
+    try:
+        ws = sh.worksheet(MASTER_TAB)
+    except gspread.exceptions.WorksheetNotFound:
+        raise SystemExit(f"Master tab missing: {MASTER_TAB!r}")
+    values = ws.get_all_values() or []
+    if not values:
+        raise SystemExit("Item Pack Master is empty")
+    header = [h.strip() for h in values[0]]
+    col = {h: i for i, h in enumerate(header)}
+    if "UPC" not in col or "Extracted Qty" not in col:
+        raise SystemExit(f"Master missing UPC/Extracted Qty columns: {header}")
+    by: Dict[str, str] = {}
+    skipped_inactive = 0
+    for r in values[1:]:
+        rr = r + [""] * 20
+        upc = str(rr[col["UPC"]]).strip()
+        ext = _norm_ext(rr[col["Extracted Qty"]])
+        if not upc or ext is None:
+            continue
+        if "Active" in col:
+            act = str(rr[col["Active"]]).strip().upper()
+            if act in ("FALSE", "0", "N", "NO"):
+                skipped_inactive += 1
+                continue
+        # Prefer first; if duplicate UPC later, keep first gold
+        if upc not in by:
+            by[upc] = ext
+    print(f"master loaded: {len(by)} UPCs (skipped_inactive={skipped_inactive})")
+    return by
+
+
+def _inv_tabs(sh: gspread.Spreadsheet, only: Optional[Sequence[str]]) -> List[gspread.Worksheet]:
+    if only:
+        return [sh.worksheet(name.strip()) for name in only]
+    return [ws for ws in sh.worksheets() if ws.title.startswith("Inv - ")]
+
+
+def _col_index(header: List[str], *names: str) -> Optional[int]:
+    for n in names:
+        if n in header:
+            return header.index(n)
+    return None
+
+
+def _ensure_qty_headers(ws: gspread.Worksheet, header: List[str], dry_run: bool) -> List[str]:
+    """Ensure Calculated Qty + Extracted Qty exist. Append at end if missing (before nothing else)."""
+    h = list(header)
+    changed = False
+    for name in ("Calculated Qty", "Extracted Qty"):
+        if name not in h:
+            h.append(name)
+            changed = True
+            print(f"  header will add: {name!r} on {ws.title}")
+    if changed and not dry_run:
+        # Write full header row
+        ws.update(values=[h], range_name="A1", value_input_option="RAW")
+    return h
+
+
+def backfill_tab(
+    ws: gspread.Worksheet,
+    master: Dict[str, str],
+    *,
+    dry_run: bool,
+) -> Dict[str, int]:
+    stats = defaultdict(int)
+    values = ws.get_all_values() or []
+    if not values:
+        print(f"{ws.title}: empty")
+        return dict(stats)
+
+    header = [c.strip() for c in values[0]]
+    header = _ensure_qty_headers(ws, header, dry_run=dry_run)
+    # If we added headers in dry-run, work with extended header for col math
+    # but cells beyond row length still blank.
+
+    i_upc = _col_index(header, "UPC")
+    i_cases = _col_index(header, "Qty (Cases)", "Qty")
+    i_cpp = _col_index(header, "Cost per Pack")
+    i_cpu = _col_index(header, "Cost per Unit")
+    i_calc = _col_index(header, "Calculated Qty")
+    i_ext = _col_index(header, "Extracted Qty")
+    i_vendor = _col_index(header, "Vendor")
+    i_inv = _col_index(header, "Invoice Number")
+    i_desc = _col_index(header, "Description")
+
+    if i_upc is None:
+        print(f"{ws.title}: no UPC column — skip")
+        stats["skip_no_upc_col"] = 1
+        return dict(stats)
+    if i_ext is None or i_calc is None:
+        print(f"{ws.title}: missing Extracted/Calculated cols after ensure — skip")
+        stats["skip_no_qty_cols"] = 1
+        return dict(stats)
+
+    updates: List[Dict[str, Any]] = []
+    samples_fill: List[str] = []
+    samples_miss: List[str] = []
+
+    for r_i, r in enumerate(values[1:], start=2):  # 1-based sheet row
+        rr = list(r) + [""] * (len(header) - len(r) + 4)
+        upc = str(rr[i_upc]).strip() if i_upc < len(rr) else ""
+        if not upc:
+            stats["skip_no_upc"] += 1
+            continue
+
+        stats["rows_with_upc"] += 1
+        ext_m = master.get(upc)
+        if ext_m is None:
+            stats["master_miss"] += 1
+            if len(samples_miss) < 8:
+                vend = rr[i_vendor] if i_vendor is not None else ""
+                invn = rr[i_inv] if i_inv is not None else ""
+                desc = (rr[i_desc] if i_desc is not None else "")[:28]
+                samples_miss.append(f"  miss row{r_i} upc={upc} inv={invn} {vend} {desc}")
+            continue
+
+        stats["master_hit"] += 1
+        ext_n = float(ext_m)
+        row_did_fill = False
+
+        # Extracted Qty — blank only
+        cur_ext = rr[i_ext] if i_ext < len(rr) else ""
+        if _blank(cur_ext):
+            stats["fill_extracted"] += 1
+            updates.append(
+                {"range": rowcol_to_a1(r_i, i_ext + 1), "values": [[ext_m]]}
+            )
+            effective_ext = ext_n
+            effective_ext_s = ext_m
+            row_did_fill = True
+        else:
+            stats["keep_extracted"] += 1
+            existing = _fnum(cur_ext)
+            if existing is not None and existing > 0:
+                effective_ext = existing
+                effective_ext_s = _norm_ext(cur_ext) or str(existing)
+            else:
+                effective_ext = ext_n
+                effective_ext_s = ext_m
+
+        # Calculated Qty — blank only
+        cur_calc = rr[i_calc] if i_calc < len(rr) else ""
+        if _blank(cur_calc):
+            cases = _fnum(rr[i_cases]) if i_cases is not None else None
+            if cases is not None and effective_ext:
+                calc_s = _fmt_qty(cases * effective_ext)
+                stats["fill_calculated"] += 1
+                updates.append(
+                    {"range": rowcol_to_a1(r_i, i_calc + 1), "values": [[calc_s]]}
+                )
+                row_did_fill = True
+            else:
+                stats["skip_calc_no_cases"] += 1
+        else:
+            stats["keep_calculated"] += 1
+
+        # Cost per Unit — blank only; live pack÷ext
+        if i_cpu is not None:
+            cur_cpu = rr[i_cpu] if i_cpu < len(rr) else ""
+            if _blank(cur_cpu):
+                cpp = _fnum(rr[i_cpp]) if i_cpp is not None else None
+                if cpp is not None and effective_ext:
+                    cpu_s = _fmt_money(cpp / effective_ext)
+                    stats["fill_cost_per_unit"] += 1
+                    updates.append(
+                        {"range": rowcol_to_a1(r_i, i_cpu + 1), "values": [[cpu_s]]}
+                    )
+                    row_did_fill = True
+                else:
+                    stats["skip_cpu_no_pack"] += 1
+            else:
+                stats["keep_cost_per_unit"] += 1
+
+        if row_did_fill and len(samples_fill) < 6:
+            vend = rr[i_vendor] if i_vendor is not None else ""
+            invn = rr[i_inv] if i_inv is not None else ""
+            samples_fill.append(
+                f"  fill row{r_i} upc={upc} ext={effective_ext_s} inv={invn} {vend}"
+            )
+
+    print(f"\n=== {ws.title} ===")
+    print(f"  rows_with_upc={stats['rows_with_upc']} hit={stats['master_hit']} miss={stats['master_miss']}")
+    print(
+        f"  fill extracted={stats['fill_extracted']} calculated={stats['fill_calculated']} "
+        f"cpu={stats['fill_cost_per_unit']}"
+    )
+    print(
+        f"  keep extracted={stats['keep_extracted']} calculated={stats['keep_calculated']} "
+        f"cpu={stats['keep_cost_per_unit']}"
+    )
+    print(
+        f"  skip calc_no_cases={stats['skip_calc_no_cases']} cpu_no_pack={stats['skip_cpu_no_pack']} "
+        f"no_upc_row={stats['skip_no_upc']}"
+    )
+    print(f"  cell updates queued={len(updates)} dry_run={dry_run}")
+    if samples_fill:
+        print("  sample fills:")
+        for s in samples_fill:
+            print(s)
+    if samples_miss:
+        print("  sample misses:")
+        for s in samples_miss:
+            print(s)
+
+    if dry_run or not updates:
+        stats["updates_queued"] = len(updates)
+        return dict(stats)
+
+    # Apply in chunks via worksheet.batch_update (ranges relative to this tab)
+    for i in range(0, len(updates), BATCH_CHUNK):
+        chunk = updates[i : i + BATCH_CHUNK]
+        ws.batch_update(chunk, value_input_option="RAW")
+        time.sleep(0.5)
+    stats["updates_written"] = len(updates)
+    print(f"  wrote {len(updates)} cells")
+    return dict(stats)
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    p = argparse.ArgumentParser(description="Backfill blank Inv qty cols from Item Pack Master")
+    p.add_argument("--sheet-id", default=DEFAULT_SHEET_ID)
+    p.add_argument(
+        "--tabs",
+        default="",
+        help='Comma-separated Inv tabs (default: all "Inv - *")',
+    )
+    p.add_argument("--dry-run", action="store_true")
+    args = p.parse_args(list(argv) if argv is not None else None)
+    tabs = [t.strip() for t in args.tabs.split(",") if t.strip()] or None
+
+    gc = _client()
+    sh = gc.open_by_key(args.sheet_id)
+    master = _load_master(sh)
+    invs = _inv_tabs(sh, tabs)
+    print(f"tabs: {[w.title for w in invs]}")
+    print(f"mode: {'DRY-RUN' if args.dry_run else 'WRITE blanks-only'}")
+
+    totals: Dict[str, int] = defaultdict(int)
+    for ws in invs:
+        st = backfill_tab(ws, master, dry_run=args.dry_run)
+        for k, v in st.items():
+            totals[k] += int(v)
+
+    print("\n========== TOTALS ==========")
+    for k in sorted(totals):
+        print(f"  {k}={totals[k]}")
+    print(f"dry_run={args.dry_run}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
