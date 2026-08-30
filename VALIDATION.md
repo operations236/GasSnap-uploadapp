@@ -142,7 +142,7 @@ Anchors: 15803 NET 35.18; 109582 55.95; 03004 2×23.99=47.98; 32420 10×15.99=15
 | cost policy | **NET** (not list PRICE) |
 | Anchors | barefoot qty3 cost **8.66** amt 25.98 (not list 11.33); high noon cost **45.10** (not 58.63); COORS LT 24pk qty4 cost **19.19** amt 76.76 (not 19.99) |
 | Reconcile | shared `_reconcile_qty_cost_amount` after vendor fixes: qty=3 cost=11.33 amt=25.98 → cost **8.66** |
-| Sheets | **append-only default.** Live `Inv - Parma` may hold **dual cohorts** for 3749614: dirty list-PRICE (~30 rows, barefoot 11.33 / high noon 58.63) + clean NET (~28 rows, barefoot 8.66 / high noon 45.10). Do **not** replace/delete unless operator explicitly asks cleanup for inv 3749614. |
+| Sheets | Operator **replace/cleanup 2026-08-30**: `match_invoice_numbers=["3749614"]` on `Inv - Parma` → **deleted 58** (dirty list-PRICE + prior clean) **appended 28** gold NET only (sum $1226.22; barefoot 8.66; high noon 45.10; coors 19.19). Default remains append-only without explicit ask. |
 | Date checked | 2026-08-30 Builder |
 
 ## Superior Beverage — sample `20260727_002200_098f3e9d6e.jpeg`
