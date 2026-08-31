@@ -3,7 +3,7 @@
 Scan Inv - {Store} tabs for lines still missing Extracted Qty and/or Cost per Unit.
 
 Prints a compact summary when anything is pending.
-With --telegram: also send to owner chat (openclaw telegram_config).
+With --telegram: send via invoice bot (~/.openclaw/telegram-invoice.env).
 Empty stdout when nothing pending (unless --always).
 
 Usage:
