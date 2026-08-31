@@ -46,10 +46,52 @@ SCOPES = (
     "https://www.googleapis.com/auth/drive",
 )
 
-# Shared bot creds used by morning_dashboard / missing_reports
-_OPENCLAW_SCRIPTS = Path.home() / ".openclaw" / "scripts"
-if str(_OPENCLAW_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(_OPENCLAW_SCRIPTS))
+# Invoice-tracking bot (separate from ops morning_dashboard bot)
+_INVOICE_TG_ENV = Path(
+    os.getenv(
+        "INVOICE_TELEGRAM_ENV",
+        str(Path.home() / ".openclaw" / "telegram-invoice.env"),
+    )
+)
+
+
+def _load_invoice_telegram() -> tuple[str, str]:
+    """Load TELEGRAM_TOKEN + TELEGRAM_CHAT_ID from invoice env file."""
+    if not _INVOICE_TG_ENV.is_file():
+        raise FileNotFoundError(
+            f"Invoice Telegram env missing: {_INVOICE_TG_ENV} "
+            "(create with TELEGRAM_TOKEN= and TELEGRAM_CHAT_ID=)"
+        )
+    vals: dict[str, str] = {}
+    for line in _INVOICE_TG_ENV.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        vals[k.strip()] = v.strip()
+    token = vals.get("TELEGRAM_TOKEN") or ""
+    chat = vals.get("TELEGRAM_CHAT_ID") or ""
+    if not token or not chat:
+        raise RuntimeError(f"TELEGRAM_TOKEN/CHAT_ID empty in {_INVOICE_TG_ENV}")
+    return token, chat
+
+
+def send_telegram(text: str) -> None:
+    token, chat_id = _load_invoice_telegram()
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = json.dumps(
+        {
+            "chat_id": chat_id,
+            "text": text,
+            "disable_web_page_preview": True,
+        }
+    ).encode()
+    req = urllib.request.Request(
+        url, data=payload, headers={"Content-Type": "application/json"}
+    )
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        if resp.status >= 300:
+            raise RuntimeError(f"telegram HTTP {resp.status}")
 
 
 def _client() -> gspread.Client:
@@ -68,25 +110,6 @@ def _store_from_tab(title: str) -> str:
     if t.lower().startswith("inv - "):
         return t[6:].strip()
     return t
-
-
-def send_telegram(text: str) -> None:
-    from telegram_config import TELEGRAM_TOKEN, TELEGRAM_CHAT_ID
-
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = json.dumps(
-        {
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": text,
-            "disable_web_page_preview": True,
-        }
-    ).encode()
-    req = urllib.request.Request(
-        url, data=payload, headers={"Content-Type": "application/json"}
-    )
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        if resp.status >= 300:
-            raise RuntimeError(f"telegram HTTP {resp.status}")
 
 
 def scan(sheet_id: str) -> Tuple[Dict[Tuple[str, str], Dict[str, int]], Dict[str, int]]:
@@ -206,7 +229,7 @@ def main(argv: List[str] | None = None) -> int:
     p.add_argument(
         "--telegram",
         action="store_true",
-        help="Send to Telegram (openclaw telegram_config)",
+        help="Send via invoice bot (~/.openclaw/telegram-invoice.env)",
     )
     args = p.parse_args(argv)
 
