@@ -1,18 +1,15 @@
 #!/usr/bin/env python3
 """
-Backfill blank Inv qty/unit columns from Item Pack Master (UPC key).
+Backfill blank Inv qty/unit columns from Item Pack Master (Store + UPC key).
 
 Fills ONLY blank cells (never overwrites operator-filled values):
-  - Extracted Qty  ← master Extracted Qty (units/case)
-  - Calculated Qty ← Qty (Cases) × Extracted Qty  (when cases + ext available)
-  - Cost per Unit  ← Cost per Pack ÷ Extracted Qty (when pack cost + ext available)
-  - SSP per Pack   ← master SSP per Unit (last-seen; unit-level ticket convention)
-  - SSP per Unit   ← same master SSP when blank
+  - Extracted Qty  ← master Extracted Qty (units/case) for this store
+  - Calculated Qty ← Qty (Cases) × Extracted Qty
+  - Cost per Unit  ← Cost per Pack ÷ Extracted Qty (live), else master CPU
+  - SSP per Pack / Unit ← master SSP per Unit for this store
 
 Does NOT invent values on master miss.
 Does NOT delete/replace whole rows — cell-level updates only.
-
-Workbook default: DayClose-Killbuck Marathon (INVOICE_WORKBOOK_ID).
 
 Usage:
   ./venv/bin/python scripts/backfill_inv_qty_from_master.py --dry-run
@@ -101,7 +98,7 @@ def _blank(s: Any) -> bool:
 
 
 def _load_master(sh: gspread.Spreadsheet) -> Dict[str, Dict[str, str]]:
-    """UPC -> {ext, ssp, ssp_store}. Active rows only when Active col present."""
+    """key store\\x1fupc -> {ext, ssp, cpu, store, upc}. Active rows only."""
     try:
         ws = sh.worksheet(MASTER_TAB)
     except gspread.exceptions.WorksheetNotFound:
@@ -115,8 +112,9 @@ def _load_master(sh: gspread.Spreadsheet) -> Dict[str, Dict[str, str]]:
         raise SystemExit(f"Master missing UPC column: {header}")
     by: Dict[str, Dict[str, str]] = {}
     skipped_inactive = 0
+    skipped_nostore = 0
     for r in values[1:]:
-        rr = r + [""] * 24
+        rr = r + [""] * 28
         upc = str(rr[col["UPC"]]).strip()
         if not upc:
             continue
@@ -125,36 +123,50 @@ def _load_master(sh: gspread.Spreadsheet) -> Dict[str, Dict[str, str]]:
             if act in ("FALSE", "0", "N", "NO"):
                 skipped_inactive += 1
                 continue
-        ext = _norm_ext(rr[col["Extracted Qty"]]) if "Extracted Qty" in col else None
-        ssp_raw = ""
-        if "SSP per Unit" in col:
-            ssp_raw = str(rr[col["SSP per Unit"]]).strip().replace("$", "").replace(",", "")
-        ssp = ""
-        if ssp_raw:
-            try:
-                v = float(ssp_raw)
-                ssp = f"{v:.2f}" if abs(v - round(v, 2)) < 1e-9 else str(v)
-            except ValueError:
-                ssp = ssp_raw
-        ssp_store = ""
-        if "SSP Store" in col:
-            ssp_store = str(rr[col["SSP Store"]]).strip()
-        if ext is None and not ssp:
+        store = ""
+        if "Store" in col:
+            store = str(rr[col["Store"]]).strip()
+        elif "SSP Store" in col:
+            store = str(rr[col["SSP Store"]]).strip()
+        if not store:
+            skipped_nostore += 1
             continue
-        if upc not in by:
-            by[upc] = {"ext": ext or "", "ssp": ssp, "ssp_store": ssp_store}
-        else:
-            if not by[upc].get("ext") and ext:
-                by[upc]["ext"] = ext
-            if not by[upc].get("ssp") and ssp:
-                by[upc]["ssp"] = ssp
-                by[upc]["ssp_store"] = ssp_store
+        ext = _norm_ext(rr[col["Extracted Qty"]]) if "Extracted Qty" in col else None
+        cpu = ""
+        if "Cost per Unit" in col:
+            cv = _fnum(rr[col["Cost per Unit"]])
+            if cv is not None:
+                cpu = _fmt_money(cv)
+        ssp = ""
+        if "SSP per Unit" in col:
+            sv = _fnum(rr[col["SSP per Unit"]])
+            if sv is not None:
+                ssp = _fmt_money(sv)
+        if ext is None and not ssp and not cpu:
+            continue
+        k = f"{store.casefold()}\x1f{upc}"
+        if k not in by:
+            by[k] = {
+                "ext": ext or "",
+                "ssp": ssp,
+                "cpu": cpu,
+                "store": store,
+                "upc": upc,
+            }
+        # also index digits-only upc
+        import re
+
+        dig = re.sub(r"\D", "", upc)
+        if dig and dig != upc:
+            kd = f"{store.casefold()}\x1f{dig}"
+            if kd not in by:
+                by[kd] = dict(by[k])
     n_ext = sum(1 for v in by.values() if v.get("ext"))
     n_ssp = sum(1 for v in by.values() if v.get("ssp"))
-    n_tag = sum(1 for v in by.values() if v.get("ssp") and v.get("ssp_store"))
+    stores = {v.get("store") for v in by.values()}
     print(
-        f"master loaded: {len(by)} UPCs ext={n_ext} ssp={n_ssp} ssp_store_tagged={n_tag} "
-        f"(skipped_inactive={skipped_inactive})"
+        f"master loaded: {len(by)} keys stores={sorted(stores)} ext={n_ext} ssp={n_ssp} "
+        f"(skipped_inactive={skipped_inactive} nostore={skipped_nostore})"
     )
     return by
 
@@ -252,7 +264,14 @@ def backfill_tab(
             continue
 
         stats["rows_with_upc"] += 1
-        mrow = master.get(upc)
+        mrow = master.get(f"{tab_store_cf}\x1f{upc}")
+        if mrow is None:
+            # digit-only fallback
+            import re as _re
+
+            dig = _re.sub(r"\D", "", upc)
+            if dig and dig != upc:
+                mrow = master.get(f"{tab_store_cf}\x1f{dig}")
         if mrow is None:
             stats["master_miss"] += 1
             if len(samples_miss) < 8:
@@ -265,12 +284,7 @@ def backfill_tab(
         stats["master_hit"] += 1
         ext_m = mrow.get("ext") or ""
         ssp_m = mrow.get("ssp") or ""
-        ssp_store = (mrow.get("ssp_store") or "").strip()
-        # Option C: SSP only when master SSP Store matches this Inv tab store
-        if do_ssp and ssp_m:
-            if not ssp_store or ssp_store.casefold() != tab_store_cf:
-                stats["skip_ssp_store_mismatch"] += 1
-                ssp_m = ""
+        # Store already baked into master key — no cross-store SSP bleed
         row_did_fill = False
         effective_ext_s = ext_m
         effective_ext = float(ext_m) if ext_m else 0.0
@@ -315,8 +329,12 @@ def backfill_tab(
                 cur_cpu = rr[i_cpu] if i_cpu < len(rr) else ""
                 if _blank(cur_cpu):
                     cpp = _fnum(rr[i_cpp]) if i_cpp is not None else None
+                    cpu_s = ""
                     if cpp is not None and effective_ext:
                         cpu_s = _fmt_money(cpp / effective_ext)
+                    if not cpu_s:
+                        cpu_s = mrow.get("cpu") or ""
+                    if cpu_s:
                         stats["fill_cost_per_unit"] += 1
                         updates.append(
                             {"range": rowcol_to_a1(r_i, i_cpu + 1), "values": [[cpu_s]]}
@@ -388,7 +406,7 @@ def backfill_tab(
     print(
         f"  skip calc_no_cases={stats['skip_calc_no_cases']} cpu_no_pack={stats['skip_cpu_no_pack']} "
         f"no_upc_row={stats['skip_no_upc']} qty_no_ext={stats['skip_qty_no_master_ext']} "
-        f"ssp_no_m={stats['skip_ssp_no_master']} ssp_store_mis={stats['skip_ssp_store_mismatch']}"
+        f"ssp_no_m={stats['skip_ssp_no_master']}"
     )
     print(f"  cell updates queued={len(updates)} dry_run={dry_run}")
     if samples_fill:

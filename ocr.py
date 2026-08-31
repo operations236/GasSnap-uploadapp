@@ -1171,20 +1171,22 @@ def process_upload_ocr(
             qa.get("overall_confidence"),
         )
 
-        # Option C: SSP from master only when tagged for this PIN store
+        # Store+UPC Item Pack Master: blanks-only Extracted/Calc/CPU + SSP
         try:
             lines = list(extraction.get("line_items") or [])
-            n_ssp = item_pack.enrich_line_items_ssp_from_master(
+            st = item_pack.enrich_line_items_from_master(
                 lines,
                 vendor_key=str(extraction.get("vendor_key") or ""),
                 store=upload_store,
             )
-            if n_ssp:
+            if any(st.get(k) for k in ("ssp", "ext", "calc", "cpu")):
                 extraction = dict(extraction)
                 extraction["line_items"] = lines
-                extraction["ssp_master_filled"] = n_ssp
+                extraction["item_pack_filled"] = st
+                if st.get("ssp"):
+                    extraction["ssp_master_filled"] = st["ssp"]
         except Exception as e:
-            logger.warning("OCR SSP master enrich soft-fail: %s", e)
+            logger.warning("OCR Item Pack Master enrich soft-fail: %s", e)
 
         line_items = line_items_for_sheets(extraction)
         inv_no = (invoice_number or "").strip() or str(extraction.get("invoice_number") or "").strip()
@@ -1278,5 +1280,7 @@ def ocr_status() -> Dict[str, Any]:
         "qa_missing_amount_rate": OCR_QA_MISSING_AMOUNT_RATE,
         "item_pack_ssp_enrich": True,
         "item_pack_ssp_store_scoped": True,
+        "item_pack_store_upc_key": True,
+        "item_pack_qty_enrich": True,
         "vendors": vendor_registry.list_vendors(),
     }

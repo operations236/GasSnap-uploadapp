@@ -1,63 +1,55 @@
-# Item Pack Master (units per case)
+# Item Pack Master (units per case) — Store + UPC
 
-**Status:** Phase 1 live (manual fill → master tab). **SSP bridge + blank SSP backfill + live OCR SSP enrich (2026-08-30).** Full Phase 2 qty lookup on OCR write still optional.  
+**Status:** Phase 2 live — **match key = Store + UPC** (2026-08-30 rebuild).  
 **Workbook:** DayClose-Killbuck Marathon (`1dcZufZoV7whkLiSzOkM8qarUXetrIr_KHBqusfWmb1M`)  
-**Tab:** `Item Pack Master`  
-**Locked decisions:** 2026-08-23 (operator); SSP from master 2026-08-30
+**Tab:** `Item Pack Master`
 
 ## Locked product rules
 
 | # | Decision |
 |---|----------|
 | 1 | Master lives as a **Google Sheet tab** in the DayClose workbook |
-| 2 | Lookup key = **UPC** for Extracted Qty (RAW zeros); **UPC + SSP Store** for SSP auto-fill (Option C — no ARCO↔Parma bleed) |
-| 3 | No master hit / cannot compute unit fields → row stays review-worthy (**Needs Review**) when Phase 2 lands |
-| 4 | **Cost per Unit** on write (Phase 2): only on master hit — prefer live `Cost per Pack ÷ Extracted Qty`; master also stores **last-seen** Cost per Unit |
-| 5 | **SSP per Unit** = last-seen **per store** (`SSP Store` col). Untagged SSP never auto-fills. Ticket SSP always wins when printed |
-| 6 | **Unit Name** documented on master rows over time (6pk / bottle / can / 15pk / …) |
-| 7 | Build path: manual Extracted Qty on Inv tabs → upsert script → later live lookup |
-| 8 | Optional PDi dump later to seed/compare — not required to start |
-
-### Formulas (when master hits)
-
-- `Extracted Qty` = units per **one case** (from master) — stable gold field
-- `Calculated Qty` = `Qty (Cases) × Extracted Qty`
-- `Cost per Unit` (invoice math) = `Cost per Pack ÷ Extracted Qty`
-- Master **Cost per Unit** / **SSP per Unit** = last-seen snapshot for reference (prices move; not SoT for P&L)
-- No hit → do **not** invent unit fields; leave blank (Phase 2 will force review)
+| 2 | Lookup key = **Store + UPC** (one row per PIN store per barcode; RAW zeros) |
+| 3 | No master hit → leave unit fields blank (do not invent) |
+| 4 | **Extracted Qty** = units per **one case** (operator gold per store) |
+| 5 | **Calculated Qty** is **never stored on master** — always `Qty (Cases) × Extracted Qty` on Inv/OCR |
+| 6 | **Cost per Unit** on Inv/OCR = live `Cost per Pack ÷ Extracted Qty` when both present; master stores last-seen CPU as fallback |
+| 7 | **SSP per Unit** last-seen **per store** (same Store key). Ticket SSP always wins when printed |
+| 8 | Blanks-only auto-fill — never overwrite hand-fills / ticket values |
+| 9 | Build path: manual Extracted Qty on `Inv - {Store}` → upsert → live OCR enrich |
 
 ## Master columns
 
 | Column | Meaning |
 |--------|---------|
-| UPC | Match key |
+| **Store** | PIN store (part of match key) |
+| **UPC** | Barcode (part of match key) |
 | Extracted Qty | Units per case (gold) |
-| Unit Name | What “unit” means for this SKU (operator-maintained) |
+| Unit Name | 6pk / bottle / can / … (operator) |
 | Cost per Unit | Last-seen wholesale per unit (reference) |
-| SSP per Unit | Last-seen suggested retail per unit (**per SSP Store**) |
-| SSP Store | PIN store that owns SSP last-seen (Option C). Empty → no auto SSP fill |
-| Description | Last seen (info) |
-| Pack Size Example | Last seen pack string (info) |
-| Vendor Example | Last seen vendor (info only — **not** part of match key) |
-| Source | `manual_inv_…` / `upsert_from_inv` / `pdi_dump` |
+| SSP per Unit | Last-seen suggested retail per unit |
+| Description | Last seen |
+| Pack Size Example | Last seen |
+| Vendor Example | Info only — **not** match key |
+| Source | `upsert_from_inv` / `obd_layout_ab_bridge` / … |
 | Active | TRUE/FALSE |
-| Notes | Conflicts, caveats |
+| Notes | Conflicts |
 | Updated At | Last upsert |
-| Hit Count | How many source rows touched this UPC |
+| Hit Count | Harvest touches |
 
-## Operator workflow (Phase 1)
+## Operator workflow
 
-1. After OCR lands on `Inv - {Store}`, manually fill **Extracted Qty** (and Cost per Unit if you want) for new SKUs — same as Killbuck Superior.
-2. Upsert into master (one-liner):
+1. After OCR lands on `Inv - {Store}`, fill **Extracted Qty** for new SKUs (and Cost/Unit if you want — or let formula `Cost per Pack / Extracted Qty` apply on next backfill/OCR).
+2. Upsert into master:
 
 ```bash
 cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/upsert_item_pack_master.py
 ```
 
-Killbuck-only:
+Wipe + full rebuild from all Inv gold:
 
 ```bash
-cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/upsert_item_pack_master.py --tabs "Inv - Killbuck"
+cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/upsert_item_pack_master.py --wipe --rebuild
 ```
 
 Dry-run:
@@ -66,67 +58,39 @@ Dry-run:
 cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/upsert_item_pack_master.py --dry-run
 ```
 
-### Backfill already-ingested Inv rows (blanks)
-
-Fills blank **Extracted Qty** / **Calculated Qty** / **Cost per Unit** / **SSP per Pack** / **SSP per Unit** from master UPC hit. Never overwrites filled cells. Does not invent on miss.
+3. Backfill blank Inv cells from master (store-scoped):
 
 ```bash
 cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/backfill_inv_qty_from_master.py --dry-run
 cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/backfill_inv_qty_from_master.py
-cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/backfill_inv_qty_from_master.py --ssp-only --tabs "Inv - ARCO"
 ```
 
-First qty run 2026-08-30: **222** cells across Killbuck/ARCO/Parma/Newcomerstown (74 ext + 74 calc + 74 cpu); 93 Superior gold kept; ~855 UPC misses (other vendors / ITEM#).
-
-### OBD dual-layout SSP seed (ITEM# bridge) + store scope
-
-Layout A tickets print SSP (no UPC). Layout B print UPC (no SSP). Join on OBD **ITEM#** → master **UPC → SSP per Unit** tagged **SSP Store** (default ARCO for the gold pair).
+4. OBD layout A+B SSP seed (tags **Store**, default ARCO):
 
 ```bash
-cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/seed_obd_ssp_from_layouts.py --dry-run
 cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/seed_obd_ssp_from_layouts.py --store ARCO
 ```
 
-**Option C:** live OCR + backfill fill blank SSP only when `SSP Store` matches PIN/tab store. Parma never gets ARCO-tagged SSP. Untagged master SSP → no auto-fill.
-
-### Live OCR SSP enrich (Wave 3)
-
-`item_pack_master.py` + `ocr.py`: after vendor fixes, blank `ssp_per_pack`/`ssp_per_unit` filled from master UPC hit (never overwrite ticket SSP; skip `abarta_coke`). Health: `item_pack_ssp_enrich=true`.
-
-3. Open tab **Item Pack Master** — confirm new UPCs, fill **Unit Name** when you care, fix Notes/CONFLICT rows.
-4. Conflict default: **keep existing Extracted Qty**, note the disagreement. Overwrite only with `--force-ext` if you intend to.
-
-## Seed (done 2026-08-23)
-
-- Source: `Inv - Killbuck` Superior inv **3754642** manual Extracted Qty + Cost/Unit formulas
-- **74** unique UPCs, **0** ext conflicts
-- Cost per Unit + SSP per Unit columns added same day (74/74 filled from Inv)
-- Source tag: `manual_inv_killbuck_superior`
-- Upsert: blank prices fill on harvest; `--force-prices` overwrites existing Cost/SSP per Unit
-
-## Phase 2 — live OCR path
+## Live OCR path
 
 ```
-extract → normalize line items → vendor fixes
-       → Item Pack Master by UPC:
-            blank SSP → fill ssp_per_pack + ssp_per_unit from master (SHIPPED 2026-08-30)
-            Extracted/Calculated/Cost-per-unit from master ext (optional / not fully wired)
-       → miss: leave blank; Needs Review per vendor policy
+extract → vendor fixes
+       → Item Pack Master lookup (PIN store + UPC):
+            blank Extracted Qty ← master
+            blank Calculated Qty ← Qty × Extracted
+            blank Cost per Unit ← Cost per Pack ÷ Extracted (else master CPU)
+            blank SSP ← master SSP
+       → never overwrite non-blank ticket/operator values
        → append sheet
 ```
 
-Shipped for **SSP enrich** (`item_pack_master.enrich_line_items_ssp_from_master`).  
-Still out of scope until asked: full auto Extracted Qty on every OCR write; pack-string SoT; vendor+item_code live key.
+Health flags: `item_pack_store_upc_key`, `item_pack_qty_enrich`, `item_pack_ssp_enrich`.
 
-## PDi dump (optional)
+## Why Store + UPC
 
-If you export pricebook items, we can compare:
-
-- Does export include **units per case / case pack / pack size**?
-- Does UPC format match invoice UPC (check digit, leading zeros)?
-
-Bring a sample dump when ready; we diff against `Item Pack Master` before bulk import.
+Counties/stores can have different shelf (SSP) and sometimes different cost.  
+Extracted Qty (pack) is usually the same, but storing per-store keeps one simple key and avoids cross-store bleed.
 
 ## Why not pack-string rules as SoT
 
-Industry pattern = item master / pricebook case pack, not per-invoice regex. Pack text can **suggest** while building the master; production trust = UPC → Extracted Qty.
+Industry pattern = item master / pricebook case pack, not per-invoice regex.
