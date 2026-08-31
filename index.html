@@ -414,71 +414,62 @@
                     </div>
                 </div>
 
-                <!-- Photo Upload -->
+                <!-- Photo Upload (multi-page) -->
                 <div>
-                    <div class="section-label mb-2 px-0.5">Invoice Photo</div>
+                    <div class="section-label mb-2 px-0.5">Invoice Photo(s)</div>
 
-                    <!-- Custom upload area — file inputs NESTED in labels (most reliable on iOS/Android) -->
                     <div id="uploadArea" class="upload-area rounded-2xl p-5 text-center">
                         <div class="flex flex-col items-center">
                             <div class="w-14 h-14 rounded-2xl flex items-center justify-center mb-3 border border-gborder"
                                  style="background: var(--bg);">
-                                <i class="fa-solid fa-image text-2xl" style="color: var(--accent);"></i>
+                                <i class="fa-solid fa-images text-2xl" style="color: var(--accent);"></i>
                             </div>
-                            <div class="font-semibold text-gtext text-sm">Add Invoice Photo or PDF</div>
-                            <div class="mono text-[10px] text-gmuted mt-1.5 tracking-wide mb-4">JPG, PNG, WEBP, HEIC, PDF · max 10 MB</div>
+                            <div class="font-semibold text-gtext text-sm">Add invoice pages</div>
+                            <div class="mono text-[10px] text-gmuted mt-1.5 tracking-wide mb-1">Multi-photo or one PDF · capture page-by-page</div>
+                            <div class="mono text-[10px] text-gmuted mb-4 tracking-wide">JPG, PNG, WEBP, HEIC, PDF · 10 MB each · up to 12 pages</div>
                             <div class="flex flex-col sm:flex-row gap-2 w-full max-w-xs">
                                 <label id="btnGallery" class="picker-btn">
                                     <i class="fa-solid fa-folder-open"></i>
                                     Gallery / Files
-                                    <input
-                                        type="file"
-                                        id="photo"
-                                        name="photo"
+                                    <input type="file" id="photo"
                                         accept="image/*,.jpg,.jpeg,.png,.webp,.heic,.heif,.pdf,application/pdf"
-                                        required
-                                        class="file-input-native"
-                                    >
+                                        multiple class="file-input-native">
                                 </label>
                                 <label id="btnCamera" class="picker-btn">
                                     <i class="fa-solid fa-camera"></i>
                                     Take Photo
-                                    <input
-                                        type="file"
-                                        id="photoCamera"
-                                        accept="image/*"
-                                        capture="environment"
-                                        class="file-input-native"
-                                        tabindex="-1"
-                                    >
+                                    <input type="file" id="photoCamera" accept="image/*"
+                                        capture="environment" class="file-input-native" tabindex="-1">
                                 </label>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Preview -->
                     <div id="previewContainer" class="hidden mt-3">
-                        <div class="relative rounded-2xl overflow-hidden preview-frame">
-                            <img id="previewImage" class="w-full max-h-[220px] object-contain photo-preview" alt="Invoice preview">
-                            <div id="previewPdf" class="hidden w-full min-h-[140px] flex flex-col items-center justify-center gap-2 py-8 px-4" style="background: var(--bg);">
-                                <i class="fa-solid fa-file-pdf text-4xl" style="color: var(--accent);"></i>
-                                <div class="text-sm font-semibold text-gtext">PDF ready to upload</div>
-                                <div id="previewPdfName" class="text-[11px] text-gmuted mono truncate max-w-full px-2"></div>
+                        <div class="rounded-2xl overflow-hidden preview-frame p-3" style="background: var(--card); border: 1px solid var(--gborder, #2a2a2a);">
+                            <div class="flex items-center justify-between mb-2 px-0.5 gap-2 flex-wrap">
+                                <div class="text-xs font-semibold text-gtext"><span id="pageCountLabel">0 pages</span></div>
+                                <div class="flex gap-1.5 flex-wrap">
+                                    <label id="btnAddMoreGallery" class="picker-btn" style="width:auto;padding:0.4rem 0.65rem;font-size:11px;min-height:0;">
+                                        <i class="fa-solid fa-plus text-[10px]"></i> Add
+                                        <input type="file" id="photoAdd"
+                                            accept="image/*,.jpg,.jpeg,.png,.webp,.heic,.heif,.pdf,application/pdf"
+                                            multiple class="file-input-native">
+                                    </label>
+                                    <label id="btnAddMoreCamera" class="picker-btn" style="width:auto;padding:0.4rem 0.65rem;font-size:11px;min-height:0;">
+                                        <i class="fa-solid fa-camera text-[10px]"></i> Snap
+                                        <input type="file" id="photoCameraAdd" accept="image/*"
+                                            capture="environment" class="file-input-native" tabindex="-1">
+                                    </label>
+                                    <button type="button" id="btnClearPages"
+                                        class="retake-btn px-2.5 py-1.5 rounded-xl text-[11px] font-medium flex items-center gap-1.5 active:scale-95 transition">
+                                        <i class="fa-solid fa-trash text-[10px]"></i> Clear
+                                    </button>
+                                </div>
                             </div>
-                            <div class="absolute top-2 right-2 flex gap-1.5">
-                                <button
-                                    type="button"
-                                    onclick="retakePhoto()"
-                                    class="retake-btn px-2.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 active:scale-95 transition"
-                                >
-                                    <i class="fa-solid fa-redo text-[10px]"></i>
-                                    <span>Retake</span>
-                                </button>
-                            </div>
+                            <div id="previewGrid" class="grid grid-cols-2 gap-2"></div>
                         </div>
-                        <div id="fileInfo" class="text-[10px] text-gmuted mt-2 px-0.5 flex items-center justify-between">
-                            <!-- populated by JS -->
-                        </div>
+                        <div id="fileInfo" class="text-[10px] text-gmuted mt-2 px-0.5 flex items-center justify-between"></div>
                     </div>
                 </div>
 
@@ -535,33 +526,24 @@
         const numberInput = document.getElementById('invoice_number');
         const photoInput = document.getElementById('photo');
         const photoCameraInput = document.getElementById('photoCamera');
-        const btnGallery = document.getElementById('btnGallery');
-        const btnCamera = document.getElementById('btnCamera');
+        const photoAddInput = document.getElementById('photoAdd');
+        const photoCameraAddInput = document.getElementById('photoCameraAdd');
         const uploadArea = document.getElementById('uploadArea');
         const previewContainer = document.getElementById('previewContainer');
-        const previewImage = document.getElementById('previewImage');
-        const previewPdf = document.getElementById('previewPdf');
-        const previewPdfName = document.getElementById('previewPdfName');
+        const previewGrid = document.getElementById('previewGrid');
+        const pageCountLabel = document.getElementById('pageCountLabel');
         const fileInfo = document.getElementById('fileInfo');
+        const btnClearPages = document.getElementById('btnClearPages');
         const submitBtn = document.getElementById('submitBtn');
         const btnText = document.getElementById('btnText');
         const btnIcon = document.getElementById('btnIcon');
         const statusContainer = document.getElementById('statusContainer');
         const statusMessage = document.getElementById('statusMessage');
 
-        let selectedFile = null;
-
-        /** Keep the named form field in sync so HTML required + FormData stay happy. */
-        function assignToPhotoInput(file) {
-            try {
-                const dt = new DataTransfer();
-                dt.items.add(file);
-                photoInput.files = dt.files;
-            } catch (err) {
-                // Older browsers: rely on selectedFile for FormData
-                console.warn('[InvUpload] DataTransfer assign failed', err);
-            }
-        }
+        const MAX_PAGES = 12;
+        const MAX_EACH_MB = 10;
+        /** @type {{file: File, url: string|null, id: string}[]} */
+        let selectedPages = [];
 
         function isPdfFile(file) {
             if (!file) return false;
@@ -574,31 +556,20 @@
             if (!file) return false;
             const t = (file.type || '').toLowerCase();
             if (t.startsWith('image/')) return true;
-            // Android camera often omits type
-            if (!t && !isPdfFile(file)) return true;
-            return /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name || '');
+            if (/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name || '')) return true;
+            if (!t && !isPdfFile(file)) return true; // Android camera
+            return false;
         }
 
         function validateUploadFile(file) {
             if (!file) return 'No file selected.';
-            if (file.size > 10 * 1024 * 1024) return 'Maximum allowed size is 10 MB. Please choose a smaller file.';
+            if (file.size > MAX_EACH_MB * 1024 * 1024) {
+                return `Each file must be under ${MAX_EACH_MB} MB (${file.name || 'file'} is too large).`;
+            }
             if (isPdfFile(file) || isImageFile(file)) return null;
             return 'Please select a photo (JPG/PNG/HEIC) or a PDF invoice.';
         }
 
-        function handlePickedFile(file, sourceInput) {
-            const err = validateUploadFile(file);
-            if (err) {
-                showStatus('error', 'Invalid file', err);
-                if (sourceInput) sourceInput.value = '';
-                return;
-            }
-            assignToPhotoInput(file);
-            showFilePreview(file);
-            hideStatus();
-        }
-
-        // Set default date to today
         function setDefaultDate() {
             const today = new Date();
             const yyyy = today.getFullYear();
@@ -607,14 +578,10 @@
             dateInput.value = `${yyyy}-${mm}-${dd}`;
         }
 
-        // Show status message
         function showStatus(type, title, message, autoHide = false) {
             statusContainer.classList.remove('hidden');
-            statusContainer.classList.add('status-success', 'status-error');
-
             let icon = '';
             let bannerClass = '';
-
             if (type === 'success') {
                 icon = '<i class="fa-solid fa-check-circle mt-0.5" style="color:#3ddc84"></i>';
                 bannerClass = 'status-banner-success';
@@ -625,7 +592,6 @@
                 icon = '<i class="fa-solid fa-info-circle mt-0.5" style="color:#f5c842"></i>';
                 bannerClass = 'status-banner-info';
             }
-
             statusMessage.className = `px-4 py-3 rounded-2xl text-sm font-medium flex items-start gap-3 ${bannerClass}`;
             statusMessage.innerHTML = `
                 <div class="shrink-0">${icon}</div>
@@ -634,11 +600,8 @@
                     <div class="text-xs mt-0.5 opacity-90 leading-snug">${message}</div>
                 </div>
             `;
-
             if (autoHide) {
-                setTimeout(() => {
-                    statusContainer.classList.add('hidden');
-                }, 4500);
+                setTimeout(() => { statusContainer.classList.add('hidden'); }, 4500);
             }
         }
 
@@ -646,174 +609,187 @@
             statusContainer.classList.add('hidden');
         }
 
-        // Photo / PDF preview
-        function showFilePreview(file) {
-            selectedFile = file;
-            previewContainer.classList.remove('hidden');
-            uploadArea.classList.add('hidden');
-
-            const sizeKB = (file.size / 1024).toFixed(1);
-            const badge = isPdfFile(file) ? 'PDF' : 'IMG';
-            fileInfo.innerHTML = `
-                <div class="flex items-center justify-between w-full gap-2">
-                    <span class="truncate max-w-[170px] text-gmuted">${file.name}</span>
-                    <span class="file-badge text-[10px] px-1.5 py-0.5 rounded shrink-0">${badge} · ${sizeKB} KB</span>
-                </div>
-            `;
-
-            if (isPdfFile(file)) {
-                previewImage.classList.add('hidden');
-                previewImage.removeAttribute('src');
-                if (previewPdf) previewPdf.classList.remove('hidden');
-                if (previewPdfName) previewPdfName.textContent = file.name || 'invoice.pdf';
-                return;
-            }
-
-            if (previewPdf) previewPdf.classList.add('hidden');
-            previewImage.classList.remove('hidden');
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                previewImage.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
-        }
-
-        function retakePhoto() {
-            photoInput.value = '';
-            if (photoCameraInput) photoCameraInput.value = '';
-            selectedFile = null;
-            previewContainer.classList.add('hidden');
-            uploadArea.classList.remove('hidden');
-            fileInfo.innerHTML = '';
-            previewImage.classList.remove('hidden');
-            previewImage.removeAttribute('src');
-            if (previewPdf) previewPdf.classList.add('hidden');
-            if (previewPdfName) previewPdfName.textContent = '';
-            hideStatus();
-        }
-
-        // Gallery / Files picker (no capture attribute)
-        photoInput.addEventListener('change', function() {
-            if (this.files && this.files[0]) handlePickedFile(this.files[0], this);
-        });
-
-        // Camera picker (capture=environment on this input only)
-        if (photoCameraInput) {
-            photoCameraInput.addEventListener('change', function() {
-                if (this.files && this.files[0]) handlePickedFile(this.files[0], this);
+        function revokePageUrls() {
+            selectedPages.forEach(p => {
+                if (p.url) { try { URL.revokeObjectURL(p.url); } catch (_) {} }
             });
         }
 
-        // Drag and drop support (bonus for desktop)
-        uploadArea.addEventListener('dragover', function(e) {
+        function clearAllPages() {
+            revokePageUrls();
+            selectedPages = [];
+            [photoInput, photoCameraInput, photoAddInput, photoCameraAddInput].forEach(el => {
+                if (el) el.value = '';
+            });
+            renderPageQueue();
+            hideStatus();
+        }
+        function retakePhoto() { clearAllPages(); }
+
+        function addFilesFromList(fileList) {
+            if (!fileList || !fileList.length) return;
+            for (const file of Array.from(fileList)) {
+                const err = validateUploadFile(file);
+                if (err) { showStatus('error', 'Invalid file', err); continue; }
+                if (selectedPages.length >= MAX_PAGES) {
+                    showStatus('error', 'Too many pages', `Maximum ${MAX_PAGES} pages per upload.`);
+                    break;
+                }
+                const hasPdf = selectedPages.some(p => isPdfFile(p.file));
+                if (isPdfFile(file)) {
+                    if (selectedPages.length > 0) {
+                        showStatus('error', 'PDF alone', 'A PDF must be the only file. Clear first, or use photos of each page.');
+                        continue;
+                    }
+                } else if (hasPdf) {
+                    showStatus('error', 'PDF already added', 'Clear the PDF first, or upload photos only.');
+                    continue;
+                }
+                let url = null;
+                if (!isPdfFile(file)) {
+                    try { url = URL.createObjectURL(file); } catch (_) { url = null; }
+                }
+                selectedPages.push({
+                    file,
+                    url,
+                    id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                });
+            }
+            renderPageQueue();
+        }
+
+        function removePage(id) {
+            const idx = selectedPages.findIndex(p => p.id === id);
+            if (idx < 0) return;
+            const [gone] = selectedPages.splice(idx, 1);
+            if (gone && gone.url) { try { URL.revokeObjectURL(gone.url); } catch (_) {} }
+            renderPageQueue();
+        }
+
+        function renderPageQueue() {
+            const n = selectedPages.length;
+            if (n === 0) {
+                previewContainer.classList.add('hidden');
+                uploadArea.classList.remove('hidden');
+                if (previewGrid) previewGrid.innerHTML = '';
+                if (fileInfo) fileInfo.innerHTML = '';
+                if (pageCountLabel) pageCountLabel.textContent = '0 pages';
+                return;
+            }
+            uploadArea.classList.add('hidden');
+            previewContainer.classList.remove('hidden');
+            if (pageCountLabel) pageCountLabel.textContent = n === 1 ? '1 page ready' : n + ' pages ready';
+            if (previewGrid) {
+                previewGrid.innerHTML = selectedPages.map((p, i) => {
+                    const pdf = isPdfFile(p.file);
+                    const name = String(p.file.name || (pdf ? 'invoice.pdf' : 'photo'))
+                        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+                    const sizeMb = (p.file.size / (1024 * 1024)).toFixed(1);
+                    if (pdf) {
+                        return '<div class="relative rounded-xl border border-gborder p-3 flex flex-col items-center justify-center min-h-[110px]" style="background:var(--bg)">'
+                            + '<i class="fa-solid fa-file-pdf text-3xl mb-1" style="color:var(--accent)"></i>'
+                            + '<div class="text-[10px] text-gtext mono truncate max-w-full px-1">' + name + '</div>'
+                            + '<div class="text-[9px] text-gmuted">' + sizeMb + ' MB</div>'
+                            + '<button type="button" data-rm="' + p.id + '" class="rm-page absolute top-1.5 right-1.5 w-7 h-7 rounded-lg text-xs" style="background:rgba(0,0,0,.55);color:#fff">×</button>'
+                            + '</div>';
+                    }
+                    const src = p.url || '';
+                    return '<div class="relative rounded-xl overflow-hidden border border-gborder min-h-[110px]" style="background:var(--bg)">'
+                        + '<img src="' + src + '" alt="Page ' + (i + 1) + '" class="w-full h-[120px] object-contain photo-preview">'
+                        + '<div class="absolute bottom-0 left-0 right-0 px-1.5 py-1 text-[9px] mono text-gmuted" style="background:rgba(0,0,0,.55)">' + (i + 1) + ' · ' + sizeMb + ' MB</div>'
+                        + '<button type="button" data-rm="' + p.id + '" class="rm-page absolute top-1.5 right-1.5 w-7 h-7 rounded-lg text-xs" style="background:rgba(0,0,0,.55);color:#fff">×</button>'
+                        + '</div>';
+                }).join('');
+                previewGrid.querySelectorAll('.rm-page').forEach(btn => {
+                    btn.addEventListener('click', () => removePage(btn.getAttribute('data-rm')));
+                });
+            }
+            const totalMb = selectedPages.reduce((s, p) => s + p.file.size, 0) / (1024 * 1024);
+            if (fileInfo) {
+                fileInfo.innerHTML = '<span>' + n + ' file' + (n > 1 ? 's' : '') + ' · ' + totalMb.toFixed(1) + ' MB total</span>'
+                    + '<span class="mono">order = page order</span>';
+            }
+        }
+
+        function bindPicker(inputEl) {
+            if (!inputEl) return;
+            inputEl.addEventListener('change', function () {
+                if (this.files && this.files.length) addFilesFromList(this.files);
+                this.value = '';
+            });
+        }
+        bindPicker(photoInput);
+        bindPicker(photoCameraInput);
+        bindPicker(photoAddInput);
+        bindPicker(photoCameraAddInput);
+        if (btnClearPages) btnClearPages.addEventListener('click', clearAllPages);
+
+        uploadArea.addEventListener('dragover', function (e) {
             e.preventDefault();
             this.classList.add('dragover');
         });
-
-        uploadArea.addEventListener('dragleave', function() {
+        uploadArea.addEventListener('dragleave', function () {
             this.classList.remove('dragover');
         });
-
-        uploadArea.addEventListener('drop', function(e) {
+        uploadArea.addEventListener('drop', function (e) {
             e.preventDefault();
             this.classList.remove('dragover');
-            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                handlePickedFile(e.dataTransfer.files[0], null);
-            }
+            if (e.dataTransfer.files && e.dataTransfer.files.length) addFilesFromList(e.dataTransfer.files);
         });
 
-        // Form submission
-        form.addEventListener('submit', async function(e) {
+        form.addEventListener('submit', async function (e) {
             e.preventDefault();
             hideStatus();
-
             const invoiceDate = dateInput.value;
             const invoiceNumber = numberInput.value.trim();
-            const file = photoInput.files[0] || selectedFile;
-
-            // Client validation
-            if (!invoiceDate) {
-                showStatus('error', 'Date required', 'Please select the invoice date.');
-                return;
-            }
-            if (!invoiceNumber) {
-                showStatus('error', 'Invoice # required', 'Please enter the invoice number.');
-                numberInput.focus();
-                return;
-            }
-            if (!file) {
-                showStatus('error', 'File required', 'Please take a photo or select a photo/PDF of the invoice.');
-                return;
-            }
-            const fileErr = validateUploadFile(file);
-            if (fileErr) {
-                showStatus('error', 'Invalid file', fileErr);
-                return;
+            if (!invoiceDate) { showStatus('error', 'Date required', 'Please select the invoice date.'); return; }
+            if (!invoiceNumber) { showStatus('error', 'Invoice # required', 'Please enter the invoice number.'); numberInput.focus(); return; }
+            if (!selectedPages.length) { showStatus('error', 'File required', 'Add at least one photo or PDF of the invoice.'); return; }
+            for (const p of selectedPages) {
+                const fileErr = validateUploadFile(p.file);
+                if (fileErr) { showStatus('error', 'Invalid file', fileErr); return; }
             }
 
-            // UI: loading state
             const originalText = btnText.textContent;
             submitBtn.disabled = true;
-            btnText.textContent = 'Uploading...';
+            btnText.textContent = selectedPages.length > 1 ? ('Uploading ' + selectedPages.length + ' pages...') : 'Uploading...';
             btnIcon.className = 'fa-solid fa-spinner fa-spin ml-0.5';
 
             try {
                 const formData = new FormData();
                 formData.append('invoice_date', invoiceDate);
                 formData.append('invoice_number', invoiceNumber);
-                formData.append('photo', file);
+                selectedPages.forEach(p => formData.append('photos', p.file, p.file.name || 'page.jpg'));
 
                 const response = await fetch('/upload', {
                     method: 'POST',
                     body: formData,
                     credentials: 'same-origin'
                 });
+                if (response.status === 401) { showPinGate(); return; }
 
-                if (response.status === 401) {
-                    // Session expired mid-use — send back to the PIN gate
-                    showPinGate();
-                    return;
-                }
-
-                // Nginx 413 / HTML error pages are not JSON
                 const raw = await response.text();
                 let result = null;
-                try {
-                    result = raw ? JSON.parse(raw) : null;
-                } catch (_) {
-                    result = null;
-                }
+                try { result = raw ? JSON.parse(raw) : null; } catch (_) { result = null; }
 
                 if (response.ok && result && result.success) {
-                    // Success!
+                    const pages = result.page_count || selectedPages.length;
                     showStatus(
                         'success',
                         'Upload Successful!',
-                        `${result.message}<br>Store: <strong>${result.store}</strong><br>ID: <span class="mono">${result.id}</span>`
+                        result.message + '<br>Store: <strong>' + result.store + '</strong><br>Pages: <strong>' + pages + '</strong><br>ID: <span class="mono">' + result.id + '</span>'
                     );
-
-                    // Reset form
                     form.reset();
-                    retakePhoto();
-                    setDefaultDate(); // reset date
-
-                    // Optional: scroll to status
+                    clearAllPages();
+                    setDefaultDate();
                     statusContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 } else if (response.status === 413) {
-                    showStatus(
-                        'error',
-                        'File too large',
-                        'Server rejected the file (over size limit). Use a photo under 10 MB, or compress the PDF and try again.'
-                    );
+                    showStatus('error', 'File too large', 'Server rejected the upload. Use fewer/smaller photos (max 10 MB each, ~36 MB total), or compress the PDF.');
                 } else if (result) {
                     const errorMsg = result.detail || result.message || 'Upload failed. Please try again.';
-                    showStatus('error', 'Upload Failed', errorMsg);
+                    showStatus('error', 'Upload Failed', typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
                 } else {
-                    showStatus(
-                        'error',
-                        'Upload Failed',
-                        `Server returned ${response.status}. ${raw ? raw.slice(0, 160) : 'Empty response.'}`
-                    );
+                    showStatus('error', 'Upload Failed', 'Server returned ' + response.status + '. ' + (raw ? raw.slice(0, 160) : 'Empty response.'));
                 }
             } catch (error) {
                 console.error('Upload error:', error);
@@ -821,11 +797,10 @@
                 const msg = (error && error.message) || String(error || '');
                 let hint = 'Could not reach the server. Check your internet or try again in a moment.';
                 if (/Failed to fetch|NetworkError|Load failed/i.test(msg) || name === 'TypeError') {
-                    hint = 'Network dropped mid-upload (common on cellular or if the file is large). Stay on Wi‑Fi, keep the screen on, and retry. PDF/photo max 10 MB.';
+                    hint = 'Network dropped mid-upload (common on cellular or large multi-page). Stay on Wi‑Fi, keep the screen on, and retry. Max 10 MB per page.';
                 }
                 showStatus('error', 'Connection Error', hint);
             } finally {
-                // Restore button
                 submitBtn.disabled = false;
                 btnText.textContent = originalText || 'Upload Invoice';
                 btnIcon.className = 'fa-solid fa-arrow-up ml-0.5';

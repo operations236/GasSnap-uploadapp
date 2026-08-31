@@ -11,7 +11,8 @@ import time
 import uuid
 import datetime
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List, Optional, Tuple
+import io
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, Request, Depends
@@ -30,7 +31,9 @@ BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 LOGS_DIR = BASE_DIR / "logs"
 PINS_FILE = BASE_DIR / "pins.json"
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB per file
+MAX_FILES = 12
+MAX_TOTAL_SIZE = 36 * 1024 * 1024  # 36 MB combined packet (nginx should be ≥40m)
 ALLOWED_CONTENT_TYPES = [
     "image/jpeg",
     "image/png",
@@ -201,6 +204,59 @@ async def health_check():
         "timestamp": datetime.datetime.now().isoformat(),
     }
 
+def _is_pdf_bytes(content: bytes, filename: str, content_type: str) -> bool:
+    ext = Path(filename or "").suffix.lower()
+    ct = (content_type or "").lower()
+    return content.startswith(b"%PDF") or ext == ".pdf" or "pdf" in ct
+
+
+def _guess_ext(filename: str, content: bytes, content_type: str) -> str:
+    if _is_pdf_bytes(content, filename, content_type):
+        return ".pdf"
+    ext = Path(filename or "").suffix.lower()
+    if ext in ALLOWED_EXTENSIONS:
+        return ext
+    ct = (content_type or "").lower()
+    if "png" in ct:
+        return ".png"
+    if "webp" in ct:
+        return ".webp"
+    if "heic" in ct or "heif" in ct:
+        return ".heic"
+    return ".jpg"
+
+
+def _images_to_multipage_pdf(image_blobs: List[bytes]) -> bytes:
+    """Merge one or more image bytes into a multipage PDF for Gemini OCR."""
+    try:
+        from PIL import Image
+    except ImportError as e:
+        raise RuntimeError("Pillow required for multi-photo merge") from e
+
+    imgs: List = []
+    try:
+        for blob in image_blobs:
+            im = Image.open(io.BytesIO(blob))
+            im.load()
+            if im.mode in ("RGBA", "P", "LA"):
+                im = im.convert("RGB")
+            elif im.mode != "RGB":
+                im = im.convert("RGB")
+            imgs.append(im)
+        if not imgs:
+            raise ValueError("no images to merge")
+        out = io.BytesIO()
+        first, rest = imgs[0], imgs[1:]
+        first.save(out, format="PDF", save_all=bool(rest), append_images=rest)
+        return out.getvalue()
+    finally:
+        for im in imgs:
+            try:
+                im.close()
+            except Exception:
+                pass
+
+
 # Main upload endpoint
 @app.post("/upload")
 async def upload_invoice(
@@ -208,90 +264,182 @@ async def upload_invoice(
     store_name: str = Depends(require_session),
     invoice_date: str = Form(..., description="Invoice date (YYYY-MM-DD)"),
     invoice_number: str = Form(..., description="Invoice number or reference"),
-    photo: UploadFile = File(..., description="Photo or PDF of the invoice"),
+    photos: Optional[List[UploadFile]] = File(None),
+    photo: Optional[UploadFile] = File(None),
 ):
     """
-    Accepts invoice photo/PDF + metadata. Store identity comes from the session
-    (set at /login), not a per-request PIN.
-    Saves file + creates JSON metadata file.
-    Queues Gemini OCR → per-line Google Sheets rows in the background.
-    Returns immediately (does not wait on OCR).
+    Accepts one or more invoice photos/PDFs + metadata (session store).
+
+    Multi-page: several images are merged into one multipage PDF for OCR.
+    A single PDF is kept as-is. Mixing PDF + images in one packet is rejected.
     """
-    # 1. Basic validations
     if not invoice_date or not invoice_number:
         raise HTTPException(status_code=400, detail="Invoice date and number are required.")
 
-    if not photo or not photo.filename:
-        raise HTTPException(status_code=400, detail="Invoice photo or PDF is required.")
-
-    # 3. Read file content (for size + save)
-    try:
-        content = await photo.read()
-    except Exception as e:
-        logger.error(f"Failed to read uploaded file: {e}")
-        raise HTTPException(status_code=400, detail="Failed to read uploaded file.")
-
-    file_size = len(content)
-    if file_size == 0:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
-    if file_size > MAX_FILE_SIZE:
+    # Collect files: multi `photos` and legacy single `photo`
+    uploads: List[UploadFile] = []
+    if photos:
+        if isinstance(photos, list):
+            uploads.extend([p for p in photos if p is not None])
+        else:
+            uploads.append(photos)
+    if photo is not None and (photo.filename or "").strip():
+        uploads.append(photo)
+    # Drop empties
+    uploads = [u for u in uploads if u is not None and (u.filename or "").strip()]
+    if not uploads:
+        raise HTTPException(status_code=400, detail="At least one invoice photo or PDF is required.")
+    if len(uploads) > MAX_FILES:
         raise HTTPException(
             status_code=400,
-            detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024*1024)} MB.",
+            detail=f"Too many files. Maximum is {MAX_FILES} photos/PDFs per upload.",
         )
 
-    # 4. Content type / extension (best effort — mobile often omits type)
-    content_type = (photo.content_type or "").strip().lower()
-    file_ext = Path(photo.filename).suffix.lower()
-    looks_pdf = content.startswith(b"%PDF") or file_ext == ".pdf" or "pdf" in content_type
-    if looks_pdf:
-        file_ext = ".pdf"
-        if not content_type:
-            content_type = "application/pdf"
-    elif not file_ext or file_ext not in ALLOWED_EXTENSIONS:
-        # default images when extension missing/unknown
-        file_ext = ".jpg"
-    if content_type and not any(ct in content_type for ct in ALLOWED_CONTENT_TYPES):
-        # Allow empty/odd mobile types; hard-reject only clear non-media
-        if content_type not in ("application/octet-stream", "binary/octet-stream", ""):
-            logger.warning(f"Unusual content type for upload: {content_type}")
-
-    # 5. Generate safe unique filename (preserve real .pdf — never force .jpg)
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    if file_ext not in ALLOWED_EXTENSIONS:
-        file_ext = ".pdf" if looks_pdf else ".jpg"
-
-    unique_id = f"{timestamp}_{uuid.uuid4().hex[:10]}"
-    safe_photo_filename = f"{unique_id}{file_ext}"
-    photo_path = UPLOAD_DIR / safe_photo_filename
-
-    # 6. Save the file
+    # Read all payloads
+    parts: List[Tuple[str, bytes, str]] = []  # orig_name, content, content_type
+    total_size = 0
     try:
-        with open(photo_path, "wb") as buffer:
-            buffer.write(content)
-        logger.info(f"File saved: {safe_photo_filename} ({file_size} bytes) type={content_type or 'unknown'}")
+        for uf in uploads:
+            content = await uf.read()
+            size = len(content)
+            if size == 0:
+                raise HTTPException(status_code=400, detail=f"Empty file: {uf.filename}")
+            if size > MAX_FILE_SIZE:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"File too large ({uf.filename}). Max {MAX_FILE_SIZE // (1024*1024)} MB each.",
+                )
+            total_size += size
+            if total_size > MAX_TOTAL_SIZE:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Combined upload too large. Max {MAX_TOTAL_SIZE // (1024*1024)} MB total.",
+                )
+            parts.append(
+                (
+                    uf.filename or "upload.bin",
+                    content,
+                    (uf.content_type or "").strip().lower(),
+                )
+            )
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Failed to save file: {e}")
+        logger.error(f"Failed to read uploaded file(s): {e}")
+        raise HTTPException(status_code=400, detail="Failed to read uploaded file(s).")
+
+    pdf_flags = [_is_pdf_bytes(c, n, t) for n, c, t in parts]
+    n_pdf = sum(1 for f in pdf_flags if f)
+    n_img = len(parts) - n_pdf
+
+    if n_pdf and n_img:
+        raise HTTPException(
+            status_code=400,
+            detail="Upload either photos or one PDF — not both in the same packet.",
+        )
+    if n_pdf > 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Upload one PDF at a time (or use multiple photos of the pages instead).",
+        )
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    unique_id = f"{timestamp}_{uuid.uuid4().hex[:10]}"
+    page_filenames: List[str] = []
+    page_meta: List[dict] = []
+
+    # Save individual pages for audit
+    try:
+        for i, (orig_name, content, content_type) in enumerate(parts, start=1):
+            ext = _guess_ext(orig_name, content, content_type)
+            if ext not in ALLOWED_EXTENSIONS:
+                ext = ".pdf" if _is_pdf_bytes(content, orig_name, content_type) else ".jpg"
+            page_name = f"{unique_id}_p{i:02d}{ext}" if len(parts) > 1 else f"{unique_id}{ext}"
+            page_path = UPLOAD_DIR / page_name
+            with open(page_path, "wb") as buffer:
+                buffer.write(content)
+            page_filenames.append(page_name)
+            page_meta.append(
+                {
+                    "filename": page_name,
+                    "original_filename": orig_name,
+                    "file_size_bytes": len(content),
+                    "content_type": content_type or None,
+                }
+            )
+            logger.info(
+                "File saved: %s (%s bytes) type=%s page=%s/%s",
+                page_name,
+                len(content),
+                content_type or "unknown",
+                i,
+                len(parts),
+            )
+    except Exception as e:
+        logger.error(f"Failed to save file(s): {e}")
         raise HTTPException(status_code=500, detail="Failed to save file. Please try again.")
 
-    # 7. Create and save metadata JSON
+    # OCR media path: single file as-is; multi-image → multipage PDF
+    ocr_filename: str
+    ocr_path: Path
+    content_type_primary: str
+    file_size_primary: int
+
+    if n_pdf == 1:
+        ocr_filename = page_filenames[0]
+        ocr_path = UPLOAD_DIR / ocr_filename
+        content_type_primary = "application/pdf"
+        file_size_primary = parts[0][1].__len__()
+    elif len(parts) == 1:
+        ocr_filename = page_filenames[0]
+        ocr_path = UPLOAD_DIR / ocr_filename
+        content_type_primary = parts[0][2] or "image/jpeg"
+        file_size_primary = len(parts[0][1])
+    else:
+        # Multi photo → one multipage PDF for Gemini
+        try:
+            pdf_bytes = _images_to_multipage_pdf([c for _, c, _ in parts])
+        except Exception as e:
+            logger.error(f"Multi-photo PDF merge failed: {e}")
+            raise HTTPException(
+                status_code=400,
+                detail="Could not merge photos into multipage PDF. Try JPG/PNG, or upload a single PDF.",
+            )
+        ocr_filename = f"{unique_id}_packet.pdf"
+        ocr_path = UPLOAD_DIR / ocr_filename
+        try:
+            with open(ocr_path, "wb") as f:
+                f.write(pdf_bytes)
+        except Exception as e:
+            logger.error(f"Failed to save packet PDF: {e}")
+            raise HTTPException(status_code=500, detail="Failed to save merged PDF.")
+        content_type_primary = "application/pdf"
+        file_size_primary = len(pdf_bytes)
+        logger.info(
+            "Merged multipage PDF: %s (%s bytes) from %s photos",
+            ocr_filename,
+            file_size_primary,
+            len(parts),
+        )
+
     uploaded_at = datetime.datetime.now().isoformat()
     metadata = {
         "id": unique_id,
         "store": store_name,
         "invoice_date": invoice_date,
         "invoice_number": invoice_number.strip(),
-        "photo_filename": safe_photo_filename,
-        "original_filename": photo.filename,
+        "photo_filename": ocr_filename,
+        "page_count": len(parts),
+        "pages": page_meta,
+        "original_filename": parts[0][0] if len(parts) == 1 else f"{len(parts)}-page packet",
         "uploaded_at": uploaded_at,
-        "file_size_bytes": file_size,
-        "content_type": content_type,
+        "file_size_bytes": file_size_primary,
+        "content_type": content_type_primary,
         "ocr": {"status": "queued"},
     }
 
     json_filename = f"{unique_id}.json"
     json_path = UPLOAD_DIR / json_filename
-
     try:
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=2, ensure_ascii=False)
@@ -299,11 +447,9 @@ async def upload_invoice(
     except Exception as e:
         logger.error(f"Failed to save metadata JSON: {e}")
 
-    # 8. Queue Gemini OCR → Sheets (async — do not block response)
-    #    Sheet rows are written by OCR (one per line item). No blank placeholder row.
     background_tasks.add_task(
         ocr_integration.process_upload_ocr,
-        photo_path=str(photo_path),
+        photo_path=str(ocr_path),
         meta_path=str(json_path),
         store=store_name,
         invoice_number=invoice_number.strip(),
@@ -311,24 +457,35 @@ async def upload_invoice(
         timestamp=uploaded_at,
         known_stores=list(dict.fromkeys(PIN_TO_STORE.values())),
     )
-    logger.info("OCR queued for id=%s store=%s", unique_id, store_name)
+    logger.info(
+        "OCR queued for id=%s store=%s pages=%s media=%s",
+        unique_id,
+        store_name,
+        len(parts),
+        ocr_filename,
+    )
 
-    # 9. Success response (clear and actionable)
     logger.info(f"Upload completed successfully for store '{store_name}' - ID: {unique_id}")
     return JSONResponse(
         status_code=200,
         content={
             "success": True,
-            "message": "Invoice uploaded successfully! OCR is processing in the background.",
+            "message": (
+                "Invoice uploaded successfully! OCR is processing in the background."
+                if len(parts) == 1
+                else f"Invoice packet ({len(parts)} pages) uploaded! OCR is processing in the background."
+            ),
             "id": unique_id,
             "store": store_name,
             "invoice_date": invoice_date,
             "invoice_number": invoice_number,
-            "photo_filename": safe_photo_filename,
+            "photo_filename": ocr_filename,
+            "page_count": len(parts),
             "uploaded_at": uploaded_at,
             "ocr": {"status": "queued"},
-        }
+        },
     )
+
 
 # Optional: simple listing endpoint for admin/debug (can be removed or protected later)
 @app.get("/uploads")
