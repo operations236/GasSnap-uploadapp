@@ -60,7 +60,7 @@ cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/upsert_item_pack_ma
 
 ### Telegram reminder (pending fills)
 
-Daily **9:30 AM EST** cron scans all `Inv - *` tabs and Telegram-pings when lines still lack **Extracted Qty** and/or **Cost per Unit**, grouped by **store + vendor**. Silent when clean.
+Daily **9:30 AM EST** cron scans all `Inv - *` tabs. **Telegram only when something needs attention** (blank Extracted Qty and/or Cost per Unit). **Silent when clean** — no “all clear” pings.
 
 ```bash
 cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/pending_extracted_qty_reminder.py

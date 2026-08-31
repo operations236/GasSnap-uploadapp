@@ -234,19 +234,27 @@ def main(argv: List[str] | None = None) -> int:
     args = p.parse_args(argv)
 
     by_sv, totals = scan(args.sheet_id)
+    pending = int(totals.get("pending_lines") or 0)
+
+    # Attention-only: never Telegram when nothing needs a fill
+    if pending <= 0 and not args.always:
+        print("silent: no pending Extracted Qty / Cost per Unit", file=sys.stderr)
+        return 0
+
     msg = format_message(by_sv, totals, min_lines=args.min_lines, top_n=args.top)
     if not msg:
         if args.always:
             now = datetime.now(EASTERN).strftime("%Y-%m-%d %H:%M %Z")
             msg = f"Item Pack Master — no pending Extracted Qty / Cost per Unit ({now})"
         else:
+            print("silent: nothing to report", file=sys.stderr)
             return 0
 
     print(msg)
     if args.telegram:
         try:
             send_telegram(msg)
-            print("telegram: sent", file=sys.stderr)
+            print(f"telegram: sent pending={pending}", file=sys.stderr)
         except Exception as e:
             print(f"telegram: FAIL {e}", file=sys.stderr)
             return 2
