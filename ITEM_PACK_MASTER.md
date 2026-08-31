@@ -58,6 +58,18 @@ Dry-run:
 cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/upsert_item_pack_master.py --dry-run
 ```
 
+### Telegram reminder (pending fills)
+
+Daily **9:30 AM EST** cron scans all `Inv - *` tabs and Telegram-pings when lines still lack **Extracted Qty** and/or **Cost per Unit**, grouped by **store + vendor**. Silent when clean.
+
+```bash
+cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/pending_extracted_qty_reminder.py
+cd /opt/gassnaptools/upload-app && ./venv/bin/python scripts/pending_extracted_qty_reminder.py --telegram
+```
+
+Cron line (user crontab):
+`30 13 * * * …/pending_extracted_qty_reminder.py --telegram`
+
 3. Backfill blank Inv cells from master (store-scoped):
 
 ```bash
