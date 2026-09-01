@@ -471,14 +471,18 @@ async def upload_invoice(
         content={
             "success": True,
             "message": (
-                "Invoice uploaded successfully! OCR is processing in the background."
+                "Invoice received. Line items are extracting and will appear on your Inv sheet shortly."
                 if len(parts) == 1
-                else f"Invoice packet ({len(parts)} pages) uploaded! OCR is processing in the background."
+                else (
+                    f"Invoice packet ({len(parts)} pages) received. "
+                    "Line items are extracting and will appear on your Inv sheet shortly."
+                )
             ),
+            "confirmed": True,
             "id": unique_id,
             "store": store_name,
             "invoice_date": invoice_date,
-            "invoice_number": invoice_number,
+            "invoice_number": invoice_number.strip(),
             "photo_filename": ocr_filename,
             "page_count": len(parts),
             "uploaded_at": uploaded_at,

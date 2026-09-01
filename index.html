@@ -235,6 +235,57 @@
             color: #ffe680;
         }
 
+        /* Post-upload confirmation receipt */
+        .confirm-card {
+            background: rgba(61, 220, 132, 0.08);
+            border: 1px solid rgba(61, 220, 132, 0.32);
+            box-shadow: 0 0 0 1px rgba(61, 220, 132, 0.06), 0 12px 40px rgba(0, 0, 0, 0.35);
+            animation: slideIn 0.35s ease forwards;
+        }
+        .confirm-check {
+            width: 52px;
+            height: 52px;
+            border-radius: 999px;
+            background: rgba(61, 220, 132, 0.16);
+            border: 1px solid rgba(61, 220, 132, 0.4);
+            color: #3ddc84;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.35rem;
+        }
+        .confirm-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(46, 46, 46, 0.9);
+        }
+        .confirm-row:last-child { border-bottom: 0; }
+        .confirm-label {
+            font-family: var(--mono);
+            font-size: 10px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+        .confirm-value {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text);
+            text-align: right;
+            word-break: break-word;
+        }
+        .confirm-next {
+            background: rgba(26, 26, 26, 0.75);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 10px 12px;
+            color: #b8f5d4;
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
         .header-bar {
             background: var(--bg);
             border-bottom: 1px solid var(--border);
@@ -489,11 +540,56 @@
             </form>
         </div>
 
-        <!-- Status Messages -->
+        <!-- Status Messages (errors / validation) -->
         <div id="statusContainer" class="hidden mt-4 mx-0.5">
             <div id="statusMessage" class="px-4 py-3 rounded-2xl text-sm font-medium flex items-start gap-3">
                 <!-- JS injected content -->
             </div>
+        </div>
+
+        <!-- Post-upload confirmation receipt (stays until dismissed) -->
+        <div id="confirmCard" class="hidden mt-4 mx-0.5 confirm-card rounded-2xl p-5" role="status" aria-live="polite">
+            <div class="flex flex-col items-center text-center mb-4">
+                <div class="confirm-check mb-3" aria-hidden="true">
+                    <i class="fa-solid fa-check"></i>
+                </div>
+                <div class="heading-font text-xl tracking-tight text-gtext">Invoice received</div>
+                <p id="confirmSubtitle" class="text-sm text-gmuted mt-1.5 leading-relaxed max-w-[18rem]">
+                    Saved securely. Line items are extracting in the background.
+                </p>
+            </div>
+            <div class="rounded-xl px-3.5 py-1 mb-3" style="background: var(--surface); border: 1px solid var(--border);">
+                <div class="confirm-row">
+                    <span class="confirm-label">Store</span>
+                    <span id="confirmStore" class="confirm-value">—</span>
+                </div>
+                <div class="confirm-row">
+                    <span class="confirm-label">Invoice #</span>
+                    <span id="confirmInvoice" class="confirm-value mono">—</span>
+                </div>
+                <div class="confirm-row">
+                    <span class="confirm-label">Date</span>
+                    <span id="confirmDate" class="confirm-value mono">—</span>
+                </div>
+                <div class="confirm-row">
+                    <span class="confirm-label">Pages</span>
+                    <span id="confirmPages" class="confirm-value">—</span>
+                </div>
+                <div class="confirm-row">
+                    <span class="confirm-label">Ref ID</span>
+                    <span id="confirmId" class="confirm-value mono text-[11px]">—</span>
+                </div>
+            </div>
+            <div class="confirm-next mb-4">
+                <div class="font-semibold text-[12px] mb-0.5" style="color:#3ddc84">What happens next</div>
+                OCR is processing now. Rows land on your store Inv sheet shortly.
+                Low-confidence lines are flagged Needs Review.
+            </div>
+            <button type="button" id="confirmAnotherBtn"
+                class="btn-primary w-full py-3.5 rounded-[10px] text-[15px] flex items-center justify-center gap-2">
+                <span>Upload another invoice</span>
+                <i class="fa-solid fa-plus ml-0.5"></i>
+            </button>
         </div>
 
         <!-- Footer info -->
@@ -539,6 +635,14 @@
         const btnIcon = document.getElementById('btnIcon');
         const statusContainer = document.getElementById('statusContainer');
         const statusMessage = document.getElementById('statusMessage');
+        const confirmCard = document.getElementById('confirmCard');
+        const confirmStore = document.getElementById('confirmStore');
+        const confirmInvoice = document.getElementById('confirmInvoice');
+        const confirmDate = document.getElementById('confirmDate');
+        const confirmPages = document.getElementById('confirmPages');
+        const confirmId = document.getElementById('confirmId');
+        const confirmSubtitle = document.getElementById('confirmSubtitle');
+        const confirmAnotherBtn = document.getElementById('confirmAnotherBtn');
 
         const MAX_PAGES = 12;
         const MAX_EACH_MB = 10;
@@ -579,6 +683,8 @@
         }
 
         function showStatus(type, title, message, autoHide = false) {
+            // Ephemeral banners are for errors/info; success path uses confirmCard
+            if (confirmCard && type !== 'success') hideUploadConfirmation();
             statusContainer.classList.remove('hidden');
             let icon = '';
             let bannerClass = '';
@@ -609,22 +715,64 @@
             statusContainer.classList.add('hidden');
         }
 
+        function showUploadConfirmation(result, fallbackPages) {
+            if (!confirmCard) return;
+            hideStatus();
+            const pages = result.page_count || fallbackPages || 1;
+            const inv = result.invoice_number || numberInput.value.trim() || '—';
+            const date = result.invoice_date || dateInput.value || '—';
+            const store = result.store || (storeChip.textContent || '').replace(/^Store:\s*/i, '') || '—';
+            const id = result.id || '—';
+            if (confirmStore) confirmStore.textContent = store;
+            if (confirmInvoice) confirmInvoice.textContent = inv;
+            if (confirmDate) confirmDate.textContent = date;
+            if (confirmPages) confirmPages.textContent = pages === 1 ? '1 page' : (pages + ' pages');
+            if (confirmId) confirmId.textContent = id;
+            if (confirmSubtitle) {
+                confirmSubtitle.textContent = pages > 1
+                    ? ('Packet saved (' + pages + ' pages). Line items are extracting in the background.')
+                    : 'Saved securely. Line items are extracting in the background.';
+            }
+            confirmCard.classList.remove('hidden');
+            try {
+                if (navigator.vibrate) navigator.vibrate(35);
+            } catch (_) {}
+            try {
+                confirmCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } catch (_) {}
+        }
+
+        function hideUploadConfirmation() {
+            if (confirmCard) confirmCard.classList.add('hidden');
+        }
+
+        function dismissUploadConfirmation() {
+            hideUploadConfirmation();
+            try { numberInput.focus(); } catch (_) {}
+        }
+
         function revokePageUrls() {
             selectedPages.forEach(p => {
                 if (p.url) { try { URL.revokeObjectURL(p.url); } catch (_) {} }
             });
         }
 
-        function clearAllPages() {
+        function clearAllPages(opts) {
+            const keepBanners = opts && opts.keepBanners;
             revokePageUrls();
             selectedPages = [];
             [photoInput, photoCameraInput, photoAddInput, photoCameraAddInput].forEach(el => {
                 if (el) el.value = '';
             });
             renderPageQueue();
-            hideStatus();
+            // Do not wipe post-upload confirmation — that was the old bug
+            // (success banner showed then clearAllPages hid it instantly).
+            if (!keepBanners) hideStatus();
         }
         function retakePhoto() { clearAllPages(); }
+        if (confirmAnotherBtn) {
+            confirmAnotherBtn.addEventListener('click', dismissUploadConfirmation);
+        }
 
         function addFilesFromList(fileList) {
             if (!fileList || !fileList.length) return;
@@ -740,6 +888,7 @@
         form.addEventListener('submit', async function (e) {
             e.preventDefault();
             hideStatus();
+            hideUploadConfirmation();
             const invoiceDate = dateInput.value;
             const invoiceNumber = numberInput.value.trim();
             if (!invoiceDate) { showStatus('error', 'Date required', 'Please select the invoice date.'); return; }
@@ -751,8 +900,9 @@
             }
 
             const originalText = btnText.textContent;
+            const pageSnapshot = selectedPages.length;
             submitBtn.disabled = true;
-            btnText.textContent = selectedPages.length > 1 ? ('Uploading ' + selectedPages.length + ' pages...') : 'Uploading...';
+            btnText.textContent = pageSnapshot > 1 ? ('Uploading ' + pageSnapshot + ' pages...') : 'Uploading...';
             btnIcon.className = 'fa-solid fa-spinner fa-spin ml-0.5';
 
             try {
@@ -773,16 +923,12 @@
                 try { result = raw ? JSON.parse(raw) : null; } catch (_) { result = null; }
 
                 if (response.ok && result && result.success) {
-                    const pages = result.page_count || selectedPages.length;
-                    showStatus(
-                        'success',
-                        'Upload Successful!',
-                        result.message + '<br>Store: <strong>' + result.store + '</strong><br>Pages: <strong>' + pages + '</strong><br>ID: <span class="mono">' + result.id + '</span>'
-                    );
+                    // Capture fields before reset; clear form for next ticket
+                    // without wiping the confirmation receipt (old clearAllPages bug).
                     form.reset();
-                    clearAllPages();
+                    clearAllPages({ keepBanners: true });
                     setDefaultDate();
-                    statusContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    showUploadConfirmation(result, pageSnapshot);
                 } else if (response.status === 413) {
                     showStatus('error', 'File too large', 'Server rejected the upload. Use fewer/smaller photos (max 10 MB each, ~36 MB total), or compress the PDF.');
                 } else if (result) {
